@@ -27,3 +27,13 @@ func TestTestHandler(t *testing.T) {
 		t.Errorf("unexpected content: %v", string(out))
 	}
 }
+
+func TestTestHandler_EmptyBody(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	testHandler(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("unexpected code: %d", w.Code)
+	}
+}
