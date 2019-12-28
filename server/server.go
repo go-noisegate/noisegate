@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-)
 
-type testRequest struct {
-	Path string `json:"path"`
-}
+	"github.com/ks888/hornet/common"
+)
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
@@ -17,7 +15,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		panic("http.Flusher is not implemented")
 	}
 
-	var input testRequest
+	var input common.TestRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -37,7 +35,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 func Run(addr string) error {
 	mux := http.NewServeMux()
 	// Want to be consistent with hornet cli. No need to be RESTful.
-	mux.HandleFunc("/test", testHandler)
+	mux.HandleFunc(common.TestPath, testHandler)
 
 	server := &http.Server{
 		Handler: mux,
