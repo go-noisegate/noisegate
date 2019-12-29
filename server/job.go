@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -43,7 +44,9 @@ const (
 func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 	id := generateID()
 	testBinaryPath, err := buildTestBinary(dirPath, id)
-	if err != nil {
+	if err == errNoGoFiles {
+		testBinaryPath = ""
+	} else if err != nil {
 		return Job{}, err
 	}
 
@@ -68,6 +71,8 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 	}, nil
 }
 
+var errNoGoFiles = errors.New("no go files")
+
 func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	filename := strconv.FormatInt(jobID, 10)
 	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(nfsBinaryDir, filename), ".")
@@ -75,6 +80,9 @@ func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	cmd.Dir = dirPath
 	buildLog, err := cmd.CombinedOutput()
 	if err != nil {
+		if strings.HasPrefix(string(buildLog), "can't load package: package .: no Go files in ") {
+			return "", errNoGoFiles
+		}
 		return "", fmt.Errorf("failed to build: %w\nbuild log:\n%s", err, string(buildLog))
 	}
 	return filename, nil

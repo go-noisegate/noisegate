@@ -48,14 +48,14 @@ func TestNewJob_InvalidDirPath(t *testing.T) {
 }
 
 func TestNewJob_UniqueIDCheck(t *testing.T) {
-	importPath := "github.com/ks888/hornet/server/testdata"
+	importPath := "github.com/ks888/hornet/server/testdata/no_go_files"
 	_, filename, _, _ := runtime.Caller(0)
-	dirPath := filepath.Join(filepath.Dir(filename), "testdata")
+	dirPath := filepath.Join(filepath.Dir(filename), "testdata", "no_go_files")
 
 	usedIDs := make(map[int64]struct{})
 	ch := make(chan int64)
 	numGoRoutines := 10
-	numIter := 2
+	numIter := 10
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
@@ -74,5 +74,19 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 			t.Errorf("duplicate id: %d", usedID)
 		}
 		usedIDs[usedID] = struct{}{}
+	}
+}
+
+func TestNewJob_NoGoFiles(t *testing.T) {
+	importPath := "github.com/ks888/hornet/server/testdata/no_go_files"
+	_, filename, _, _ := runtime.Caller(0)
+	dirPath := filepath.Join(filepath.Dir(filename), "testdata", "no_go_files")
+
+	job, err := NewJob(importPath, dirPath, 1)
+	if err != nil {
+		t.Fatalf("failed to create new job: %v", err)
+	}
+	if len(job.Tasks) != 0 {
+		t.Errorf("the dir has no go test functions: %d", len(job.Tasks))
 	}
 }
