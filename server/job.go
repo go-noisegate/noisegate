@@ -1,22 +1,29 @@
 package server
 
 import (
+	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 )
 
+const nfsBinaryDir = "."
+
 var jobs = make(map[int64]Job)
 
 // Job represents the job to test one package.
 type Job struct {
-	ID                    int64
-	ImportPath, DirPath   string
-	Status                JobStatus
+	ID                  int64
+	ImportPath, DirPath string
+	Status              JobStatus
+	// The path from the NFS root
 	TestBinaryPath        string
 	CreatedAt, FinishedAt time.Time
 	DependencyDepth       int
@@ -34,7 +41,11 @@ const (
 )
 
 func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
-	// TODO: build
+	id := generateID()
+	testBinaryPath, err := buildTestBinary(dirPath, id)
+	if err != nil {
+		return Job{}, err
+	}
 
 	testFuncNames, err := retrieveTestFuncNames(dirPath)
 	if err != nil {
@@ -46,14 +57,27 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 	}
 
 	return Job{
-		ID:              generateID(),
+		ID:              id,
 		ImportPath:      importPath,
 		DirPath:         dirPath,
 		Status:          JobStatusCreated,
+		TestBinaryPath:  testBinaryPath,
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
 		Tasks:           tasks,
 	}, nil
+}
+
+func buildTestBinary(dirPath string, jobID int64) (string, error) {
+	filename := strconv.FormatInt(jobID, 10)
+	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(nfsBinaryDir, filename), ".")
+	cmd.Env = append(os.Environ(), "GOOS=linux")
+	cmd.Dir = dirPath
+	buildLog, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to build: %w\nbuild log:\n%s", err, string(buildLog))
+	}
+	return filename, nil
 }
 
 var patternTestFuncName = regexp.MustCompile(`(?m)^ *func *(Test[^(]+)`)
