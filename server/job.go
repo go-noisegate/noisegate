@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -52,12 +53,8 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	var tasks []Task
-	for _, testFuncName := range testFuncNames {
-		tasks = append(tasks, Task{TestFunction: testFuncName, Status: TaskStatusCreated})
-	}
 
-	return Job{
+	job := Job{
 		ID:              id,
 		ImportPath:      importPath,
 		DirPath:         dirPath,
@@ -65,8 +62,12 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 		TestBinaryPath:  testBinaryPath,
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
-		Tasks:           tasks,
-	}, nil
+	}
+
+	for _, testFuncName := range testFuncNames {
+		job.Tasks = append(job.Tasks, Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: &job})
+	}
+	return job, nil
 }
 
 var errNoGoFiles = errors.New("no go files")
@@ -186,6 +187,7 @@ type Task struct {
 	TestFunction string
 	Status       TaskStatus
 	ElapsedTime  time.Duration
+	Job          *Job
 }
 
 // TaskStatus
@@ -213,19 +215,51 @@ type LPTPartitioner struct {
 }
 
 // NewLPTPartitioner return the new LPTPartitioner.
-func NewLPTPartitioner() LPTPartitioner {
-	return LPTPartitioner{profiler: NewSimpleProfiler()}
+func NewLPTPartitioner(profiler *SimpleProfiler) LPTPartitioner {
+	return LPTPartitioner{profiler: profiler}
+}
+
+type taskWithExecTime struct {
+	task     *Task
+	execTime time.Duration
 }
 
 // Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(tasks []Task, numPartitions int) ([]TaskSet, error) {
+func (p LPTPartitioner) Partition(tasks []Task, numPartitions int) []TaskSet {
+	sortedTasks, noProfileTasks := p.sortByExecTime(tasks)
+
+	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
 	taskSets := make([]TaskSet, numPartitions)
-	taskPtrs := make([]*Task, len(tasks))
-	for i := range tasks {
-		taskPtrs[i] = &tasks[i]
+	totalExecTimes := make([]time.Duration, numPartitions)
+	for _, t := range sortedTasks {
+		minIndex := 0
+		for i, totalExecTime := range totalExecTimes {
+			if totalExecTime < totalExecTimes[minIndex] {
+				minIndex = i
+			}
+		}
+
+		taskSets[minIndex].Tasks = append(taskSets[minIndex].Tasks, t.task)
+		totalExecTimes[minIndex] += t.execTime
 	}
-	p.distributeTasks(taskSets, taskPtrs)
-	return taskSets, nil
+
+	p.distributeTasks(taskSets, noProfileTasks)
+	return taskSets
+}
+
+func (p LPTPartitioner) sortByExecTime(tasks []Task) (sorted []taskWithExecTime, noProfile []*Task) {
+	for i := range tasks {
+		execTime := p.profiler.ExpectExecTime(tasks[i].Job.DirPath, tasks[i].TestFunction)
+		if execTime == 0 {
+			noProfile = append(noProfile, &tasks[i])
+			continue
+		}
+		sorted = append(sorted, taskWithExecTime{task: &tasks[i], execTime: execTime})
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].execTime > sorted[j].execTime
+	})
+	return
 }
 
 func (p LPTPartitioner) distributeTasks(taskSets []TaskSet, tasks []*Task) {
