@@ -151,7 +151,7 @@ type TaskSet struct {
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
 	Log                   []byte
-	Tasks                 []Task
+	Tasks                 []*Task
 	Worker                *Worker
 }
 
@@ -207,7 +207,34 @@ func (t *Task) Finished(successful bool, elapsedTime time.Duration) {
 	t.ElapsedTime = elapsedTime
 }
 
+// LPTPartitioner is the partitioner based on the longest processing time algorithm.
+type LPTPartitioner struct {
+	profiler *SimpleProfiler
+}
+
+// NewLPTPartitioner return the new LPTPartitioner.
+func NewLPTPartitioner() LPTPartitioner {
+	return LPTPartitioner{profiler: NewSimpleProfiler()}
+}
+
 // Partition divides the tasks into the list of the task sets.
-func Partition(tasks []Task) ([]TaskSet, error) {
-	return nil, nil
+func (p LPTPartitioner) Partition(tasks []Task, numPartitions int) ([]TaskSet, error) {
+	taskSets := make([]TaskSet, numPartitions)
+	taskPtrs := make([]*Task, len(tasks))
+	for i := range tasks {
+		taskPtrs[i] = &tasks[i]
+	}
+	p.distributeTasks(taskSets, taskPtrs)
+	return taskSets, nil
+}
+
+func (p LPTPartitioner) distributeTasks(taskSets []TaskSet, tasks []*Task) {
+	curr := 0
+	for _, task := range tasks {
+		taskSets[curr].Tasks = append(taskSets[curr].Tasks, task)
+		curr++
+		if curr == len(taskSets) {
+			curr = 0
+		}
+	}
 }

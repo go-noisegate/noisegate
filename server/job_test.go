@@ -157,3 +157,34 @@ func TestTask_Finished(t *testing.T) {
 		t.Errorf("elapsed time is 0")
 	}
 }
+
+func TestLPTPartition(t *testing.T) {
+	tasks := []Task{
+		{TestFunction: "f1"},
+		{TestFunction: "f2"},
+		{TestFunction: "f3"},
+	}
+	p := NewLPTPartitioner()
+	taskSets, err := p.Partition(tasks, 2)
+	if err != nil {
+		t.Fatalf("partition failed: %v", err)
+	}
+	if len(taskSets) != 2 {
+		t.Fatalf("wrong number of task sets: %d", len(taskSets))
+	}
+	if taskSets[0].Status != TaskSetStatusCreated {
+		t.Errorf("wrong status: %v", taskSets[0].Status)
+	}
+	if len(taskSets[0].Tasks) != 2 {
+		t.Fatalf("wrong number of tasks: %d", len(taskSets[0].Tasks))
+	}
+	if taskSets[0].Tasks[0] != &tasks[0] {
+		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[0])
+	}
+	if taskSets[1].Tasks[0] != &tasks[1] {
+		t.Errorf("wrong task ptr: %v", taskSets[1].Tasks[0])
+	}
+	if taskSets[0].Tasks[1] != &tasks[2] {
+		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[1])
+	}
+}
