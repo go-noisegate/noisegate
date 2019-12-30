@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-const nfsBinaryDir = "."
-
 var jobs = make(map[int64]Job)
 
 // Job represents the job to test one package.
@@ -75,7 +73,7 @@ var errNoGoFiles = errors.New("no go files")
 
 func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	filename := strconv.FormatInt(jobID, 10)
-	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(nfsBinaryDir, filename), ".")
+	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(sharedTestBinaryDir, filename), ".")
 	cmd.Env = append(os.Environ(), "GOOS=linux")
 	cmd.Dir = dirPath
 	buildLog, err := cmd.CombinedOutput()
@@ -114,7 +112,7 @@ func retrieveTestFuncNames(dirPath string) ([]string, error) {
 		path := filepath.Join(dirPath, filename)
 		content, err := ioutil.ReadFile(path)
 		if err != nil {
-			log.Printf("failed to read %s: %v", path, err)
+			log.Printf("failed to read %s: %v\n", path, err)
 			continue
 		}
 
@@ -131,6 +129,21 @@ var jobIDCounter int64
 // generateID generates the unique id. This id is unique only among this server process.
 func generateID() int64 {
 	return atomic.AddInt64(&jobIDCounter, 1)
+}
+
+// Finished is called when all the tasks are done.
+func (j *Job) Finished(successful bool) {
+	if successful {
+		j.Status = JobStatusSuccessful
+	} else {
+		j.Status = JobStatusFailed
+	}
+	j.FinishedAt = time.Now()
+
+	joinedPath := filepath.Join(sharedTestBinaryDir, j.TestBinaryPath)
+	if err := os.Remove(joinedPath); err != nil {
+		log.Printf("failed to remove the test binary %s: %v\n", joinedPath, err)
+	}
 }
 
 // TaskSet represents the set of tasks handled by one worker.
@@ -166,3 +179,8 @@ const (
 	TaskStatusSuccessful
 	TaskStatusFailed
 )
+
+// Partition divides the tasks into the list of the task sets.
+func Partition(tasks []Task) ([]TaskSet, error) {
+	return nil, nil
+}

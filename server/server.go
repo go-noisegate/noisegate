@@ -9,6 +9,8 @@ import (
 	"github.com/ks888/hornet/common"
 )
 
+var sharedTestBinaryDir string
+
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -32,7 +34,10 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Run starts the new server.
-func Run(addr string) error {
+// We can run only one server instance in the process even if the address is different.
+func Run(addr, testBinaryDir string) error {
+	sharedTestBinaryDir = testBinaryDir
+
 	mux := http.NewServeMux()
 	// Want to be consistent with hornet cli. No need to be RESTful.
 	mux.HandleFunc(common.TestPath, testHandler)

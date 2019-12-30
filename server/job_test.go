@@ -90,3 +90,18 @@ func TestNewJob_NoGoFiles(t *testing.T) {
 		t.Errorf("the dir has no go test functions: %d", len(job.Tasks))
 	}
 }
+
+func TestFinished(t *testing.T) {
+	importPath := "github.com/ks888/hornet/server/testdata"
+	_, filename, _, _ := runtime.Caller(0)
+	dirPath := filepath.Join(filepath.Dir(filename), "testdata")
+	job, err := NewJob(importPath, dirPath, 1)
+	if err != nil {
+		t.Fatalf("failed to create new job: %v", err)
+	}
+
+	job.Finished(true)
+	if job.Status != JobStatusSuccessful {
+		t.Errorf("wrong status: %v", job.Status)
+	}
+}
