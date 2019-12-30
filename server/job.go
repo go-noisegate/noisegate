@@ -152,6 +152,7 @@ type TaskSet struct {
 	StartedAt, FinishedAt time.Time
 	Log                   []byte
 	Tasks                 []Task
+	Worker                *Worker
 }
 
 // TaskSetStatus represents the status of the task set.
@@ -164,10 +165,27 @@ const (
 	TaskSetStatusFailed
 )
 
+func (s *TaskSet) Started(worker *Worker) {
+	s.StartedAt = time.Now()
+	s.Worker = worker
+	s.Status = TaskSetStatusStarted
+}
+
+func (s *TaskSet) Finished(successful bool, log []byte) {
+	s.FinishedAt = time.Now()
+	if successful {
+		s.Status = TaskSetStatusSuccessful
+	} else {
+		s.Status = TaskSetStatusFailed
+	}
+	s.Log = log
+}
+
 // Task represents one test function.
 type Task struct {
 	TestFunction string
 	Status       TaskStatus
+	ElapsedTime  time.Duration
 }
 
 // TaskStatus
@@ -179,6 +197,15 @@ const (
 	TaskStatusSuccessful
 	TaskStatusFailed
 )
+
+func (t *Task) Finished(successful bool, elapsedTime time.Duration) {
+	if successful {
+		t.Status = TaskStatusSuccessful
+	} else {
+		t.Status = TaskStatusFailed
+	}
+	t.ElapsedTime = elapsedTime
+}
 
 // Partition divides the tasks into the list of the task sets.
 func Partition(tasks []Task) ([]TaskSet, error) {

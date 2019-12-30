@@ -1,11 +1,25 @@
 package server
 
 import (
+	"io/ioutil"
+	"log"
+	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"testing"
+	"time"
 )
+
+func TestMain(m *testing.M) {
+	var err error
+	sharedDir, err = ioutil.TempDir("", "hornet")
+	if err != nil {
+		log.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	os.Exit(m.Run())
+}
 
 func TestNewJob(t *testing.T) {
 	importPath := "github.com/ks888/hornet/server/testdata"
@@ -103,5 +117,43 @@ func TestFinished(t *testing.T) {
 	job.Finished(true)
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
+	}
+}
+
+func TestTaskSet_Started(t *testing.T) {
+	set := TaskSet{Status: TaskSetStatusCreated}
+	worker := &Worker{}
+	set.Started(worker)
+	if set.Status != TaskSetStatusStarted {
+		t.Errorf("wrong status: %v", set.Status)
+	}
+	if set.Worker != worker {
+		t.Errorf("wrong worker: %v", set.Worker)
+	}
+	if set.StartedAt.IsZero() {
+		t.Errorf("StartedAt is zero")
+	}
+}
+
+func TestTaskSet_Finished(t *testing.T) {
+	set := TaskSet{Status: TaskSetStatusCreated}
+	log := "test log"
+	set.Finished(true, []byte(log))
+	if set.Status != TaskSetStatusSuccessful {
+		t.Errorf("wrong status: %v", set.Status)
+	}
+	if string(set.Log) != log {
+		t.Errorf("wrong log: %s", string(set.Log))
+	}
+}
+
+func TestTask_Finished(t *testing.T) {
+	task := Task{Status: TaskStatusCreated}
+	task.Finished(true, time.Second)
+	if task.Status != TaskStatusSuccessful {
+		t.Errorf("wrong status: %v", task.Status)
+	}
+	if task.ElapsedTime == 0 {
+		t.Errorf("elapsed time is 0")
 	}
 }
