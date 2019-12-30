@@ -73,7 +73,7 @@ var errNoGoFiles = errors.New("no go files")
 
 func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	filename := strconv.FormatInt(jobID, 10)
-	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(sharedTestBinaryDir, filename), ".")
+	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(sharedDir, filename), ".")
 	cmd.Env = append(os.Environ(), "GOOS=linux")
 	cmd.Dir = dirPath
 	buildLog, err := cmd.CombinedOutput()
@@ -140,7 +140,7 @@ func (j *Job) Finished(successful bool) {
 	}
 	j.FinishedAt = time.Now()
 
-	joinedPath := filepath.Join(sharedTestBinaryDir, j.TestBinaryPath)
+	joinedPath := filepath.Join(sharedDir, j.TestBinaryPath)
 	if err := os.Remove(joinedPath); err != nil {
 		log.Printf("failed to remove the test binary %s: %v\n", joinedPath, err)
 	}
