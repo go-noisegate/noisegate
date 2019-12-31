@@ -179,11 +179,18 @@ func TestLPTPartition(t *testing.T) {
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))
 	}
+	if taskSets[0].ID != 1 {
+		t.Fatalf("wrong id: %d", taskSets[0].ID)
+	}
 	if len(taskSets[0].Tasks) != 1 {
 		t.Fatalf("wrong number of tasks: %d", len(taskSets[0].Tasks))
 	}
 	if taskSets[0].Tasks[0] != &tasks[1] {
 		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[0])
+	}
+
+	if taskSets[1].ID != 2 {
+		t.Fatalf("wrong id: %d", taskSets[1].ID)
 	}
 	if taskSets[1].Tasks[0] != &tasks[0] {
 		t.Errorf("wrong task ptr: %v", taskSets[1].Tasks[0])

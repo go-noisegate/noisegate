@@ -149,6 +149,8 @@ func (j *Job) Finished(successful bool) {
 
 // TaskSet represents the set of tasks handled by one worker.
 type TaskSet struct {
+	// this id is unique only among the one job.
+	ID                    int
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
 	Log                   []byte
@@ -230,6 +232,9 @@ func (p LPTPartitioner) Partition(tasks []Task, numPartitions int) []TaskSet {
 
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
 	taskSets := make([]TaskSet, numPartitions)
+	for i := 0; i < numPartitions; i++ {
+		taskSets[i] = TaskSet{ID: i + 1, Status: TaskSetStatusCreated}
+	}
 	totalExecTimes := make([]time.Duration, numPartitions)
 	for _, t := range sortedTasks {
 		minIndex := 0

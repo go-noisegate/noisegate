@@ -4,16 +4,16 @@ import "testing"
 
 func TestScheduler_SameDepth(t *testing.T) {
 	s := taskSetScheduler{}
-	taskSet1 := TaskSet{Tasks: []*Task{&Task{TestFunction: "f1"}}}
+	taskSet1 := TaskSet{ID: 1}
 	s.Add(taskSet1, 0)
-	taskSet2 := TaskSet{Tasks: []*Task{&Task{TestFunction: "f2"}}}
+	taskSet2 := TaskSet{ID: 2}
 	s.Add(taskSet2, 0)
 
 	next, err := s.Next()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if next.Tasks[0].TestFunction != taskSet1.Tasks[0].TestFunction {
+	if next.ID != taskSet1.ID {
 		t.Errorf("wrong next task: %v", next)
 	}
 
@@ -21,7 +21,7 @@ func TestScheduler_SameDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if next.Tasks[0].TestFunction != taskSet2.Tasks[0].TestFunction {
+	if next.ID != taskSet2.ID {
 		t.Errorf("wrong next task: %v", next)
 	}
 }
@@ -37,7 +37,7 @@ func TestScheduler_DifferentDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if next.Tasks[0].TestFunction != taskSet2.Tasks[0].TestFunction {
+	if next.ID != taskSet2.ID {
 		t.Errorf("wrong next task: %v", next)
 	}
 
@@ -45,7 +45,7 @@ func TestScheduler_DifferentDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if next.Tasks[0].TestFunction != taskSet1.Tasks[0].TestFunction {
+	if next.ID != taskSet1.ID {
 		t.Errorf("wrong next task: %v", next)
 	}
 }
