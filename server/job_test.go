@@ -175,10 +175,7 @@ func TestLPTPartition(t *testing.T) {
 		{TestFunction: "f2", Job: job},
 		{TestFunction: "f3", Job: job},
 	}
-	taskSets, err := p.Partition(tasks, 2)
-	if err != nil {
-		t.Fatalf("partition failed: %v", err)
-	}
+	taskSets := p.Partition(tasks, 2)
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))
 	}
@@ -204,10 +201,7 @@ func TestLPTPartition_EmptyProfile(t *testing.T) {
 		{TestFunction: "f3", Job: job},
 	}
 	p := NewLPTPartitioner(NewSimpleProfiler())
-	taskSets, err := p.Partition(tasks, 2)
-	if err != nil {
-		t.Fatalf("partition failed: %v", err)
-	}
+	taskSets := p.Partition(tasks, 2)
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))
 	}
