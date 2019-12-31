@@ -2,11 +2,11 @@ package main
 
 import (
 	"errors"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/ks888/hornet/client"
+	"github.com/ks888/hornet/common/log"
 	"github.com/urfave/cli"
 )
 
@@ -23,6 +23,9 @@ func main() {
 					if c.NArg() == 0 {
 						return errors.New("the target filepath is not specified")
 					}
+
+					log.EnableDebugLog(c.Bool("debug"))
+
 					filepath := c.Args().First()
 					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout}
 					return client.TestAction(c.Context, filepath, options)
@@ -31,10 +34,14 @@ func main() {
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:        "addr",
-				Usage:       "hornetd server's address",
-				Value:       "localhost:48059",
-				DefaultText: "localhost:48059",
+				Name:  "addr",
+				Usage: "hornetd server's address",
+				Value: "localhost:48059",
+			},
+			&cli.BoolFlag{
+				Name:  "debug",
+				Usage: "print the debug logs",
+				Value: false,
 			},
 		},
 	}

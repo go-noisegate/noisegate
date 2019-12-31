@@ -4,21 +4,42 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 
+	"github.com/ks888/hornet/common/log"
 	"github.com/ks888/hornet/server"
+	"github.com/urfave/cli"
 )
 
 func main() {
-	addr := "localhost:48059" // bees
-	if len(os.Args) >= 2 {
-		addr = os.Args[1]
+	app := &cli.App{
+		Name:      filepath.Base(os.Args[0]),
+		ArgsUsage: "[server address]",
+		Action: func(c *cli.Context) error {
+			addr := "localhost:48059" // bees
+			if c.NArg() > 0 {
+				addr = c.Args().First()
+			}
+
+			log.EnableDebugLog(c.Bool("debug"))
+
+			return runServer(addr)
+		},
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "debug",
+				Usage: "print the debug logs",
+				Value: false,
+			},
+		},
+		HideHelp: true, // to hide the `COMMANDS` section in the help message.
 	}
 
-	if err := runServer(addr); err != nil {
+	err := app.Run(os.Args)
+	if err != nil {
 		log.Fatal(err)
 	}
 }
@@ -26,7 +47,7 @@ func main() {
 func runServer(addr string) error {
 	sharedDir, err := ioutil.TempDir("", "hornet")
 	if err != nil {
-		log.Fatalf("failed to create the directory to store the test binary: %v", err)
+		return fmt.Errorf("failed to create the directory to store the test binary: %w", err)
 	}
 	defer os.RemoveAll(sharedDir)
 
