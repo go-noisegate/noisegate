@@ -112,6 +112,24 @@ func TestNewJob_NoGoFiles(t *testing.T) {
 	}
 }
 
+func TestNewJobWithImportGraph(t *testing.T) {
+	importPath := "github.com/ks888/hornet/server"
+	_, filename, _, _ := runtime.Caller(0)
+	dirPath := filepath.Join(filepath.Dir(filename), "testdata")
+	_, ch, err := NewJobWithImportGraph(importPath, dirPath, 0)
+	if err != nil {
+		t.Fatalf("failed to create new job: %v", err)
+	}
+
+	importGraph := <-ch
+	if importGraph.Root != filepath.Dir(filepath.Dir(filename)) {
+		t.Errorf("wrong root: %s", importGraph.Root)
+	}
+	if len(importGraph.Inbounds) == 0 {
+		t.Errorf("empty data")
+	}
+}
+
 func TestFinished(t *testing.T) {
 	importPath := "github.com/ks888/hornet/server/testdata"
 	_, filename, _, _ := runtime.Caller(0)

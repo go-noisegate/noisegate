@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"go/build"
 	"io/ioutil"
 	"log"
 	"os"
@@ -40,6 +41,7 @@ const (
 	JobStatusFailed
 )
 
+// NewJob returns the new job.
 func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 	id := generateID()
 	testBinaryPath, err := buildTestBinary(dirPath, id)
@@ -68,6 +70,32 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 		job.Tasks = append(job.Tasks, Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: &job})
 	}
 	return job, nil
+}
+
+// NewJobWithImportGraph returns the new job and the channel to receive the import graph when ready.
+func NewJobWithImportGraph(importPath, dirPath string, dependencyDepth int) (Job, chan ImportGraph, error) {
+	ch := make(chan ImportGraph, 1)
+	go func() {
+		repoRoot, err := findRepoRoot(dirPath)
+		if err != nil {
+			log.Printf("failed to find the repository root of %s: %v", dirPath, err)
+			repoRoot = dirPath
+		} else {
+			repoRoot = strings.TrimSpace(repoRoot)
+		}
+		ctxt := &build.Default
+		ch <- BuildImportGraph(ctxt, repoRoot)
+	}()
+
+	job, err := NewJob(importPath, dirPath, dependencyDepth)
+	return job, ch, err
+}
+
+func findRepoRoot(dir string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	return string(out), err
 }
 
 var errNoGoFiles = errors.New("no go files")
