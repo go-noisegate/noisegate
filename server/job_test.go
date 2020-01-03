@@ -2,13 +2,14 @@ package server
 
 import (
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/ks888/hornet/common/log"
 )
 
 func TestMain(m *testing.M) {
@@ -17,6 +18,8 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("failed to create temp dir: %v", err)
 	}
+
+	log.EnableDebugLog(true)
 
 	os.Exit(m.Run())
 }
