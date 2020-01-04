@@ -53,7 +53,7 @@ func TestNewJob(t *testing.T) {
 		t.Errorf("invalid number of tasks: %d, %#v", len(job.Tasks), job.Tasks)
 	}
 	for i, actualTask := range job.Tasks {
-		if !reflect.DeepEqual(expectedTasks[i], actualTask) {
+		if !reflect.DeepEqual(expectedTasks[i], *actualTask) {
 			t.Errorf("wrong task: %#v", actualTask)
 		}
 	}
@@ -147,13 +147,12 @@ func TestFinished(t *testing.T) {
 
 func TestTaskSet_Started(t *testing.T) {
 	set := TaskSet{Status: TaskSetStatusCreated}
-	worker := &Worker{}
-	set.Started(worker)
+	set.Started(1)
 	if set.Status != TaskSetStatusStarted {
 		t.Errorf("wrong status: %v", set.Status)
 	}
-	if set.Worker != worker {
-		t.Errorf("wrong worker: %v", set.Worker)
+	if set.WorkerID != 1 {
+		t.Errorf("wrong worker: %d", set.WorkerID)
 	}
 	if set.StartedAt.IsZero() {
 		t.Errorf("StartedAt is zero")
@@ -200,7 +199,7 @@ func TestLPTPartition(t *testing.T) {
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))
 	}
-	if taskSets[0].ID != 1 {
+	if taskSets[0].ID != 0 {
 		t.Fatalf("wrong id: %d", taskSets[0].ID)
 	}
 	if len(taskSets[0].Tasks) != 1 {
@@ -210,7 +209,7 @@ func TestLPTPartition(t *testing.T) {
 		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[0])
 	}
 
-	if taskSets[1].ID != 2 {
+	if taskSets[1].ID != 1 {
 		t.Fatalf("wrong id: %d", taskSets[1].ID)
 	}
 	if taskSets[1].Tasks[0] != &tasks[0] {

@@ -4,9 +4,9 @@ import "testing"
 
 func TestScheduler_SameDepth(t *testing.T) {
 	s := taskSetScheduler{}
-	taskSet1 := TaskSet{ID: 1}
+	taskSet1 := &TaskSet{ID: 1}
 	s.Add(taskSet1, 0)
-	taskSet2 := TaskSet{ID: 2}
+	taskSet2 := &TaskSet{ID: 2}
 	s.Add(taskSet2, 0)
 
 	next, err := s.Next()
@@ -28,9 +28,9 @@ func TestScheduler_SameDepth(t *testing.T) {
 
 func TestScheduler_DifferentDepth(t *testing.T) {
 	s := taskSetScheduler{}
-	taskSet1 := TaskSet{Tasks: []*Task{&Task{TestFunction: "f1"}}}
+	taskSet1 := &TaskSet{Tasks: []*Task{&Task{TestFunction: "f1"}}}
 	s.Add(taskSet1, 1)
-	taskSet2 := TaskSet{Tasks: []*Task{&Task{TestFunction: "f2"}}}
+	taskSet2 := &TaskSet{Tasks: []*Task{&Task{TestFunction: "f2"}}}
 	s.Add(taskSet2, 0)
 
 	next, err := s.Next()
@@ -60,7 +60,7 @@ func TestScheduler_Empty(t *testing.T) {
 
 func TestScheduler_TooLargeDepth(t *testing.T) {
 	s := taskSetScheduler{}
-	err := s.Add(TaskSet{}, maxDepth)
+	err := s.Add(&TaskSet{}, maxDepth)
 	if err == nil {
 		t.Errorf("error is not returned")
 	}

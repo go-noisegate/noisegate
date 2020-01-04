@@ -9,11 +9,11 @@ const maxDepth = 10
 
 // taskSetScheduler maintains the set of the runnable task sets.
 type taskSetScheduler struct {
-	runnables [maxDepth][]TaskSet
+	runnables [maxDepth][]*TaskSet
 }
 
 // Add adds the new task set.
-func (s *taskSetScheduler) Add(set TaskSet, depth int) error {
+func (s *taskSetScheduler) Add(set *TaskSet, depth int) error {
 	if depth >= maxDepth {
 		return fmt.Errorf("too large depth: %d", depth)
 	}
@@ -23,7 +23,7 @@ func (s *taskSetScheduler) Add(set TaskSet, depth int) error {
 
 var errNoTaskSet = errors.New("no runnable task set")
 
-func (s *taskSetScheduler) Next() (TaskSet, error) {
+func (s *taskSetScheduler) Next() (*TaskSet, error) {
 	for i, r := range s.runnables {
 		if len(r) != 0 {
 			next := r[0]
@@ -32,5 +32,5 @@ func (s *taskSetScheduler) Next() (TaskSet, error) {
 		}
 	}
 
-	return TaskSet{}, errNoTaskSet
+	return nil, errNoTaskSet
 }

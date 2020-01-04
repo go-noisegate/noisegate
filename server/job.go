@@ -17,8 +17,6 @@ import (
 	"time"
 )
 
-var jobs = make(map[int64]Job)
-
 // Job represents the job to test one package.
 type Job struct {
 	ID                  int64
@@ -28,8 +26,8 @@ type Job struct {
 	TestBinaryPath        string
 	CreatedAt, FinishedAt time.Time
 	DependencyDepth       int
-	TaskSets              []TaskSet
-	Tasks                 []Task
+	TaskSets              []*TaskSet
+	Tasks                 []*Task
 }
 
 // JobStatus represents the status of the job.
@@ -67,7 +65,7 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 	}
 
 	for _, testFuncName := range testFuncNames {
-		job.Tasks = append(job.Tasks, Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: &job})
+		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: &job})
 	}
 	return job, nil
 }
@@ -177,13 +175,13 @@ func (j *Job) Finished(successful bool) {
 
 // TaskSet represents the set of tasks handled by one worker.
 type TaskSet struct {
-	// this id is unique only among the one job.
+	// this id must be the valid index of the Job.TaskSets.
 	ID                    int
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
 	Log                   []byte
 	Tasks                 []*Task
-	Worker                *Worker
+	WorkerID              int64
 }
 
 // TaskSetStatus represents the status of the task set.
@@ -196,9 +194,9 @@ const (
 	TaskSetStatusFailed
 )
 
-func (s *TaskSet) Started(worker *Worker) {
+func (s *TaskSet) Started(workerID int64) {
 	s.StartedAt = time.Now()
-	s.Worker = worker
+	s.WorkerID = workerID
 	s.Status = TaskSetStatusStarted
 }
 
@@ -255,13 +253,13 @@ type taskWithExecTime struct {
 }
 
 // Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(tasks []Task, numPartitions int) []TaskSet {
+func (p LPTPartitioner) Partition(tasks []Task, numPartitions int) []*TaskSet {
 	sortedTasks, noProfileTasks := p.sortByExecTime(tasks)
 
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
-	taskSets := make([]TaskSet, numPartitions)
+	taskSets := make([]*TaskSet, numPartitions)
 	for i := 0; i < numPartitions; i++ {
-		taskSets[i] = TaskSet{ID: i + 1, Status: TaskSetStatusCreated}
+		taskSets[i] = &TaskSet{ID: i, Status: TaskSetStatusCreated}
 	}
 	totalExecTimes := make([]time.Duration, numPartitions)
 	for _, t := range sortedTasks {
@@ -295,7 +293,7 @@ func (p LPTPartitioner) sortByExecTime(tasks []Task) (sorted []taskWithExecTime,
 	return
 }
 
-func (p LPTPartitioner) distributeTasks(taskSets []TaskSet, tasks []*Task) {
+func (p LPTPartitioner) distributeTasks(taskSets []*TaskSet, tasks []*Task) {
 	curr := 0
 	for _, task := range tasks {
 		taskSets[curr].Tasks = append(taskSets[curr].Tasks, task)
