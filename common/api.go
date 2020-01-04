@@ -1,5 +1,7 @@
 package common
 
+// Assume one API for each cli command and no need to be RESTful so far.
+
 // TestPath represents the path of the test API.
 const TestPath = "/test"
 

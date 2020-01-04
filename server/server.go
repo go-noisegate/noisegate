@@ -33,6 +33,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 }
 
+// HornetServer serves the APIs for the cli client.
 type HornetServer struct {
 	*http.Server
 }
@@ -43,7 +44,6 @@ func NewHornetServer(addr, dir string) HornetServer {
 	sharedDir = dir
 
 	mux := http.NewServeMux()
-	// Want to be consistent with hornet cli. No need to be RESTful.
 	mux.HandleFunc(common.TestPath, testHandler)
 
 	return HornetServer{
