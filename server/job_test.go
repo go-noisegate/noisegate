@@ -190,7 +190,7 @@ func TestLPTPartition(t *testing.T) {
 	p := NewLPTPartitioner(profiler)
 
 	job := &Job{DirPath: "/path"}
-	tasks := []Task{
+	tasks := []*Task{
 		{TestFunction: "f1", Job: job},
 		{TestFunction: "f2", Job: job},
 		{TestFunction: "f3", Job: job},
@@ -205,24 +205,24 @@ func TestLPTPartition(t *testing.T) {
 	if len(taskSets[0].Tasks) != 1 {
 		t.Fatalf("wrong number of tasks: %d", len(taskSets[0].Tasks))
 	}
-	if taskSets[0].Tasks[0] != &tasks[1] {
+	if *taskSets[0].Tasks[0] != *tasks[1] {
 		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[0])
 	}
 
 	if taskSets[1].ID != 1 {
 		t.Fatalf("wrong id: %d", taskSets[1].ID)
 	}
-	if taskSets[1].Tasks[0] != &tasks[0] {
+	if *taskSets[1].Tasks[0] != *tasks[0] {
 		t.Errorf("wrong task ptr: %v", taskSets[1].Tasks[0])
 	}
-	if taskSets[1].Tasks[1] != &tasks[2] {
+	if *taskSets[1].Tasks[1] != *tasks[2] {
 		t.Errorf("wrong task ptr: %v", taskSets[1].Tasks[0])
 	}
 }
 
 func TestLPTPartition_EmptyProfile(t *testing.T) {
 	job := &Job{}
-	tasks := []Task{
+	tasks := []*Task{
 		{TestFunction: "f1", Job: job},
 		{TestFunction: "f2", Job: job},
 		{TestFunction: "f3", Job: job},
@@ -238,13 +238,13 @@ func TestLPTPartition_EmptyProfile(t *testing.T) {
 	if len(taskSets[0].Tasks) != 2 {
 		t.Fatalf("wrong number of tasks: %d", len(taskSets[0].Tasks))
 	}
-	if taskSets[0].Tasks[0] != &tasks[0] {
+	if *taskSets[0].Tasks[0] != *tasks[0] {
 		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[0])
 	}
-	if taskSets[1].Tasks[0] != &tasks[1] {
+	if *taskSets[1].Tasks[0] != *tasks[1] {
 		t.Errorf("wrong task ptr: %v", taskSets[1].Tasks[0])
 	}
-	if taskSets[0].Tasks[1] != &tasks[2] {
+	if *taskSets[0].Tasks[1] != *tasks[2] {
 		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[1])
 	}
 }

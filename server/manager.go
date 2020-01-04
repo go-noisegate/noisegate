@@ -29,29 +29,27 @@ type nextTaskSetResponse struct {
 
 // Manager manages the workers.
 type Manager struct {
-	serverForWorkers *http.Server
-	scheduler        taskSetScheduler
-	jobs             map[int64]*Job
+	scheduler   taskSetScheduler
+	profiler    *SimpleProfiler
+	partitioner LPTPartitioner
+	jobs        map[int64]*Job
 }
 
 type Worker struct{}
 
 // NewManager returns the new manager.
-func NewManager(addr string) Manager {
-	manager := Manager{jobs: make(map[int64]*Job)}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc(nextTaskSetPath, manager.handleNextTaskSet)
-
-	manager.serverForWorkers = &http.Server{
-		Handler: mux,
-		Addr:    addr,
+func NewManager() *Manager {
+	profiler := NewSimpleProfiler()
+	partitioner := NewLPTPartitioner(profiler)
+	return &Manager{
+		profiler:    profiler,
+		partitioner: partitioner,
+		jobs:        make(map[int64]*Job),
 	}
-	return manager
 }
 
 // NextTaskSet returns the runnable task set.
-func (m Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err error) {
+func (m *Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err error) {
 	for {
 		taskSet, err = m.scheduler.Next()
 		if err != nil {
@@ -69,7 +67,39 @@ func (m Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err er
 	return
 }
 
-func (m Manager) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
+// AddJob partitions the job and adds them to the scheduler.
+func (m *Manager) AddJob(job *Job, depth int) {
+	job.TaskSets = m.partitioner.Partition(job.Tasks, 1)
+	for _, taskSet := range job.TaskSets {
+		// TODO: finish the empty task set immediately
+		if err := m.scheduler.Add(taskSet, depth); err != nil {
+			log.Printf("failed to add the new task set %v: %v", taskSet, err)
+		}
+	}
+	m.jobs[job.ID] = job
+}
+
+// ManagerServer serves some of the manager's function as the APIs so that the workers can use them.
+type ManagerServer struct {
+	*http.Server
+	manager *Manager
+}
+
+// NewManagerServer returns the new manager server.
+func NewManagerServer(addr string, manager *Manager) ManagerServer {
+	s := ManagerServer{manager: manager}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(nextTaskSetPath, s.handleNextTaskSet)
+	s.Server = &http.Server{
+		Handler: mux,
+		Addr:    addr,
+	}
+	return s
+}
+
+// handleNextTaskSet handles the next task set request.
+func (s ManagerServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
 	var req nextTaskSetRequest
 	rawBody, _ := ioutil.ReadAll(r.Body)
 	if err := json.Unmarshal(rawBody, &req); err != nil {
@@ -77,7 +107,7 @@ func (m Manager) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, taskSet, err := m.NextTaskSet(req.WorkerID)
+	job, taskSet, err := s.manager.NextTaskSet(req.WorkerID)
 	if err != nil {
 		if err == errNoTaskSet {
 			w.WriteHeader(http.StatusNotFound)

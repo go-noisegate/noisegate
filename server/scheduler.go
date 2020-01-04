@@ -34,3 +34,11 @@ func (s *taskSetScheduler) Next() (*TaskSet, error) {
 
 	return nil, errNoTaskSet
 }
+
+// Size returns the total nubmer of task sets.
+func (s *taskSetScheduler) Size() (total int) {
+	for _, r := range s.runnables {
+		total += len(r)
+	}
+	return
+}

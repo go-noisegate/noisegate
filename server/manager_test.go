@@ -8,18 +8,33 @@ import (
 	"testing"
 )
 
-func TestHandleNextTaskSet(t *testing.T) {
-	manager := NewManager("")
-	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary"}
-	task := &Task{TestFunction: "TestFunc1", Job: job}
-	taskSet := &TaskSet{ID: 1, Tasks: []*Task{task}}
-	job.TaskSets = append(job.TaskSets, taskSet)
-	manager.scheduler.Add(taskSet, 0)
+func TestManager_AddJob(t *testing.T) {
+	job := &Job{ID: 1}
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 
+	manager := NewManager()
+	manager.AddJob(job, 0)
+	if len(job.TaskSets) != 1 {
+		t.Errorf("wrong number of task sets: %d", len(job.TaskSets))
+	}
+	if manager.scheduler.Size() != 1 {
+		t.Errorf("wrong size: %d", manager.scheduler.Size())
+	}
+	if _, ok := manager.jobs[job.ID]; !ok {
+		t.Errorf("job is not stored: %d", job.ID)
+	}
+}
+
+func TestManagerServer_HandleNextTaskSet(t *testing.T) {
+	manager := NewManager()
+	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary"}
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
+	manager.AddJob(job, 0)
+
+	server := NewManagerServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{"worker_id": 1}`))
 	resp := httptest.NewRecorder()
-	manager.handleNextTaskSet(resp, req)
-
+	server.handleNextTaskSet(resp, req)
 	if resp.Code != http.StatusOK {
 		t.Errorf("unexpected status: %d", resp.Code)
 	}
@@ -28,10 +43,11 @@ func TestHandleNextTaskSet(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), decodedResp); err != nil {
 		t.Fatalf("failed to unmarshal resp body: %v", err)
 	}
-	if decodedResp.TaskSetID != 1 {
+	taskSet := job.TaskSets[0]
+	if decodedResp.TaskSetID != taskSet.ID {
 		t.Errorf("unexpected task set id: %d", decodedResp.TaskSetID)
 	}
-	if decodedResp.JobID != 1 {
+	if decodedResp.JobID != job.ID {
 		t.Errorf("unexpected job id: %d", decodedResp.JobID)
 	}
 	if len(decodedResp.TestFunctions) != 1 || decodedResp.TestFunctions[0] != "TestFunc1" {
@@ -49,26 +65,31 @@ func TestHandleNextTaskSet(t *testing.T) {
 	}
 }
 
-func TestHandleNextTaskSet_NoTaskSet(t *testing.T) {
-	manager := NewManager("")
+func TestManagerServer_HandleNextTaskSet_NoTaskSet(t *testing.T) {
+	manager := NewManager()
+	server := NewManagerServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
-	manager.handleNextTaskSet(resp, req)
+	server.handleNextTaskSet(resp, req)
 
 	if resp.Code != http.StatusNotFound {
 		t.Errorf("unexpected status: %d", resp.Code)
 	}
 }
 
-func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
-	manager := NewManager("")
-	manager.scheduler.Add(&TaskSet{ID: 1}, 0) // empty
-	task := &Task{TestFunction: "TestFunc1", Job: &Job{ID: 1}}
-	manager.scheduler.Add(&TaskSet{ID: 2, Tasks: []*Task{task}}, 1) // not empty
+func TestManagerServer_HandleNextTaskSet_EmptyTaskSet(t *testing.T) {
+	manager := NewManager()
+	emptyJob := &Job{ID: 1}
+	manager.AddJob(emptyJob, 0)
 
+	job := &Job{ID: 2}
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
+	manager.AddJob(job, 1)
+
+	server := NewManagerServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
-	manager.handleNextTaskSet(resp, req)
+	server.handleNextTaskSet(resp, req)
 
 	if resp.Code != http.StatusOK {
 		t.Errorf("unexpected status: %d", resp.Code)
@@ -77,19 +98,17 @@ func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), decodedResp); err != nil {
 		t.Fatalf("failed to unmarshal resp body: %v", err)
 	}
-	if decodedResp.TaskSetID != 2 {
-		t.Errorf("unexpected task set id: %d", decodedResp.TaskSetID)
+	if decodedResp.JobID != 2 {
+		t.Errorf("unexpected job id: %d", decodedResp.JobID)
 	}
 }
 
-func TestHandleNextTaskSet_InvalidReqBody(t *testing.T) {
-	manager := NewManager("")
-	task := &Task{TestFunction: "TestFunc1", Job: &Job{ID: 1}}
-	manager.scheduler.Add(&TaskSet{ID: 1, Tasks: []*Task{task}}, 0)
-
+func TestManagerServer_HandleNextTaskSet_InvalidReqBody(t *testing.T) {
+	manager := NewManager()
+	server := NewManagerServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{`))
 	resp := httptest.NewRecorder()
-	manager.handleNextTaskSet(resp, req)
+	server.handleNextTaskSet(resp, req)
 	if resp.Code != http.StatusBadRequest {
 		t.Errorf("unexpected status: %d", resp.Code)
 	}

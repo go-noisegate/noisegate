@@ -253,7 +253,7 @@ type taskWithExecTime struct {
 }
 
 // Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(tasks []Task, numPartitions int) []*TaskSet {
+func (p LPTPartitioner) Partition(tasks []*Task, numPartitions int) []*TaskSet {
 	sortedTasks, noProfileTasks := p.sortByExecTime(tasks)
 
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
@@ -278,14 +278,14 @@ func (p LPTPartitioner) Partition(tasks []Task, numPartitions int) []*TaskSet {
 	return taskSets
 }
 
-func (p LPTPartitioner) sortByExecTime(tasks []Task) (sorted []taskWithExecTime, noProfile []*Task) {
+func (p LPTPartitioner) sortByExecTime(tasks []*Task) (sorted []taskWithExecTime, noProfile []*Task) {
 	for i := range tasks {
 		execTime := p.profiler.ExpectExecTime(tasks[i].Job.DirPath, tasks[i].TestFunction)
 		if execTime == 0 {
-			noProfile = append(noProfile, &tasks[i])
+			noProfile = append(noProfile, tasks[i])
 			continue
 		}
-		sorted = append(sorted, taskWithExecTime{task: &tasks[i], execTime: execTime})
+		sorted = append(sorted, taskWithExecTime{task: tasks[i], execTime: execTime})
 	}
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].execTime > sorted[j].execTime
