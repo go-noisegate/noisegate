@@ -46,9 +46,9 @@ func TestNewJob(t *testing.T) {
 	}
 
 	expectedTasks := []Task{
-		{TestFunction: "TestSum", Job: &job},
-		{TestFunction: "TestSum_ErrorCase", Job: &job},
-		{TestFunction: "TestSum_Add1", Job: &job},
+		{TestFunction: "TestSum", Job: job},
+		{TestFunction: "TestSum_ErrorCase", Job: job},
+		{TestFunction: "TestSum_Add1", Job: job},
 	}
 	if len(expectedTasks) != len(job.Tasks) {
 		t.Errorf("invalid number of tasks: %d, %#v", len(job.Tasks), job.Tasks)
@@ -121,7 +121,7 @@ func TestNewJob_NoGoFiles(t *testing.T) {
 	}
 }
 
-func TestFinish(t *testing.T) {
+func TestJob_Finish(t *testing.T) {
 	importPath := "github.com/ks888/hornet/server/testdata"
 	_, filename, _, _ := runtime.Caller(0)
 	dirPath := filepath.Join(filepath.Dir(filename), "testdata")
@@ -134,6 +134,7 @@ func TestFinish(t *testing.T) {
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
 	}
+	job.WaitFinished()
 }
 
 func TestTaskSet_Started(t *testing.T) {

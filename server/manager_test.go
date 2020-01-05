@@ -15,7 +15,7 @@ func TestManager_AddJob(t *testing.T) {
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 
 	manager := NewManager()
-	manager.AddJob(job, 0)
+	manager.AddJob(job)
 	if len(job.TaskSets) != 1 {
 		t.Errorf("wrong number of task sets: %d", len(job.TaskSets))
 	}
@@ -31,7 +31,7 @@ func TestManagerServer_HandleNextTaskSet(t *testing.T) {
 	manager := NewManager()
 	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary"}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
-	manager.AddJob(job, 0)
+	manager.AddJob(job)
 
 	server := NewManagerServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{"worker_id": 1}`))
@@ -82,11 +82,11 @@ func TestManagerServer_HandleNextTaskSet_NoTaskSet(t *testing.T) {
 func TestManagerServer_HandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 	manager := NewManager()
 	emptyJob := &Job{ID: 1}
-	manager.AddJob(emptyJob, 0)
+	manager.AddJob(emptyJob)
 
 	job := &Job{ID: 2}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
-	manager.AddJob(job, 1)
+	manager.AddJob(job)
 
 	server := NewManagerServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{}`))
@@ -117,10 +117,10 @@ func TestManagerServer_HandleNextTaskSet_InvalidReqBody(t *testing.T) {
 }
 
 func TestManagerServer_HandleReportResult(t *testing.T) {
-	job := &Job{ID: 1}
+	job := &Job{ID: 1, finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestManager_ReportResult", Job: job})
 	manager := NewManager()
-	manager.AddJob(job, 0)
+	manager.AddJob(job)
 
 	server := NewManagerServer("", manager)
 	reqBody := reportResultRequest{

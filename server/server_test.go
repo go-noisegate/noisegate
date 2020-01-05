@@ -5,15 +5,38 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
-func TestTestHandler(t *testing.T) {
-	path := "/go/src/github.com/ks888/hornet/server/server.go"
+func TestHandleTest(t *testing.T) {
+	manager := NewManager()
+	server := NewHornetServer("", sharedDir, manager)
+
+	_, filename, _, _ := runtime.Caller(0)
+	path := filepath.Join(filepath.Dir(filename), "testdata")
 	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
-	testHandler(w, req)
+	go func() {
+		var job *Job
+		var taskSet *TaskSet
+		for {
+			var err error
+			job, taskSet, err = manager.NextTaskSet(0)
+			if err == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		if err := manager.ReportResult(job.ID, taskSet.ID, true, nil); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}()
+	server.handleTest(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("unexpected code: %d", w.Code)
@@ -23,15 +46,18 @@ func TestTestHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if string(out) != "test "+path+"...\nok" {
-		t.Errorf("unexpected content: %v", string(out))
+	if string(out) != "successful\n" {
+		t.Errorf("unexpected content: %s", string(out))
 	}
 }
 
-func TestTestHandler_EmptyBody(t *testing.T) {
+func TestHandleTest_EmptyBody(t *testing.T) {
+	manager := NewManager()
+	server := NewHornetServer("", "", manager)
+
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
-	testHandler(w, req)
+	server.handleTest(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("unexpected code: %d", w.Code)

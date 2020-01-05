@@ -29,6 +29,7 @@ type Job struct {
 	DependencyDepth       int
 	TaskSets              []*TaskSet
 	Tasks                 []*Task
+	finishedCh            chan struct{}
 	// the channel to receive the import graph when ready.
 	ImportGraphCh chan ImportGraph
 }
@@ -43,18 +44,18 @@ const (
 )
 
 // NewJob returns the new job.
-func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
+func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 	id := generateID()
 	testBinaryPath, err := buildTestBinary(dirPath, id)
 	if err == errNoGoFiles {
 		testBinaryPath = ""
 	} else if err != nil {
-		return Job{}, err
+		return nil, err
 	}
 
 	testFuncNames, err := retrieveTestFuncNames(dirPath)
 	if err != nil {
-		return Job{}, err
+		return nil, err
 	}
 
 	ch := make(chan ImportGraph, 1)
@@ -70,7 +71,7 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 		ch <- BuildImportGraph(ctxt, repoRoot)
 	}()
 
-	job := Job{
+	job := &Job{
 		ID:              id,
 		ImportPath:      importPath,
 		DirPath:         dirPath,
@@ -78,11 +79,12 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 		TestBinaryPath:  testBinaryPath,
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
+		finishedCh:      make(chan struct{}),
 		ImportGraphCh:   ch,
 	}
 
 	for _, testFuncName := range testFuncNames {
-		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: &job})
+		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: job})
 	}
 	return job, nil
 }
@@ -193,6 +195,12 @@ func (j *Job) Finish() {
 	if err := os.Remove(joinedPath); err != nil {
 		log.Debugf("failed to remove the test binary %s: %v\n", joinedPath, err)
 	}
+	close(j.finishedCh)
+}
+
+// WaitFinished waits until the job finished.
+func (j *Job) WaitFinished() {
+	<-j.finishedCh
 }
 
 // TaskSet represents the set of tasks handled by one worker.

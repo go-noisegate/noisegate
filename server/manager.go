@@ -51,12 +51,12 @@ func (m *Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err e
 	return
 }
 
-// AddJob partitions the job and adds them to the scheduler.
-func (m *Manager) AddJob(job *Job, depth int) {
+// AddJob partitions the job into the task sets and adds them to the scheduler.
+func (m *Manager) AddJob(job *Job) {
 	job.TaskSets = m.partitioner.Partition(job.Tasks, 1)
 	for _, taskSet := range job.TaskSets {
 		// TODO: finish the empty task set immediately
-		if err := m.scheduler.Add(taskSet, depth); err != nil {
+		if err := m.scheduler.Add(taskSet, job.DependencyDepth); err != nil {
 			log.Printf("failed to add the new task set %v: %v", taskSet, err)
 		}
 	}
@@ -201,6 +201,7 @@ func (s ManagerServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request)
 	for _, t := range taskSet.Tasks {
 		resp.TestFunctions = append(resp.TestFunctions, t.TestFunction)
 	}
+
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(&resp); err != nil {
 		log.Printf("failed to encode the response: %v\n", err)
