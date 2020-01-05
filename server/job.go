@@ -29,6 +29,8 @@ type Job struct {
 	DependencyDepth       int
 	TaskSets              []*TaskSet
 	Tasks                 []*Task
+	// the channel to receive the import graph when ready.
+	ImportGraphCh chan ImportGraph
 }
 
 // JobStatus represents the status of the job.
@@ -55,24 +57,6 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (Job, error) {
 		return Job{}, err
 	}
 
-	job := Job{
-		ID:              id,
-		ImportPath:      importPath,
-		DirPath:         dirPath,
-		Status:          JobStatusCreated,
-		TestBinaryPath:  testBinaryPath,
-		CreatedAt:       time.Now(),
-		DependencyDepth: dependencyDepth,
-	}
-
-	for _, testFuncName := range testFuncNames {
-		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: &job})
-	}
-	return job, nil
-}
-
-// NewJobWithImportGraph returns the new job and the channel to receive the import graph when ready.
-func NewJobWithImportGraph(importPath, dirPath string, dependencyDepth int) (Job, chan ImportGraph, error) {
 	ch := make(chan ImportGraph, 1)
 	go func() {
 		repoRoot, err := findRepoRoot(dirPath)
@@ -86,8 +70,21 @@ func NewJobWithImportGraph(importPath, dirPath string, dependencyDepth int) (Job
 		ch <- BuildImportGraph(ctxt, repoRoot)
 	}()
 
-	job, err := NewJob(importPath, dirPath, dependencyDepth)
-	return job, ch, err
+	job := Job{
+		ID:              id,
+		ImportPath:      importPath,
+		DirPath:         dirPath,
+		Status:          JobStatusCreated,
+		TestBinaryPath:  testBinaryPath,
+		CreatedAt:       time.Now(),
+		DependencyDepth: dependencyDepth,
+		ImportGraphCh:   ch,
+	}
+
+	for _, testFuncName := range testFuncNames {
+		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: &job})
+	}
+	return job, nil
 }
 
 func findRepoRoot(dir string) (string, error) {

@@ -44,6 +44,7 @@ func TestNewJob(t *testing.T) {
 	if job.DependencyDepth != 1 {
 		t.Errorf("wrong dependency depth: %v", job.DependencyDepth)
 	}
+
 	expectedTasks := []Task{
 		{TestFunction: "TestSum", Job: &job},
 		{TestFunction: "TestSum_ErrorCase", Job: &job},
@@ -56,6 +57,14 @@ func TestNewJob(t *testing.T) {
 		if !reflect.DeepEqual(expectedTasks[i], *actualTask) {
 			t.Errorf("wrong task: %#v", actualTask)
 		}
+	}
+
+	importGraph := <-job.ImportGraphCh
+	if importGraph.Root != filepath.Dir(filepath.Dir(filename)) {
+		t.Errorf("wrong root: %s", importGraph.Root)
+	}
+	if len(importGraph.Inbounds) == 0 {
+		t.Errorf("empty data")
 	}
 }
 
@@ -109,24 +118,6 @@ func TestNewJob_NoGoFiles(t *testing.T) {
 	}
 	if len(job.Tasks) != 0 {
 		t.Errorf("the dir has no go test functions: %d", len(job.Tasks))
-	}
-}
-
-func TestNewJobWithImportGraph(t *testing.T) {
-	importPath := "github.com/ks888/hornet/server"
-	_, filename, _, _ := runtime.Caller(0)
-	dirPath := filepath.Join(filepath.Dir(filename), "testdata")
-	_, ch, err := NewJobWithImportGraph(importPath, dirPath, 0)
-	if err != nil {
-		t.Fatalf("failed to create new job: %v", err)
-	}
-
-	importGraph := <-ch
-	if importGraph.Root != filepath.Dir(filepath.Dir(filename)) {
-		t.Errorf("wrong root: %s", importGraph.Root)
-	}
-	if len(importGraph.Inbounds) == 0 {
-		t.Errorf("empty data")
 	}
 }
 
