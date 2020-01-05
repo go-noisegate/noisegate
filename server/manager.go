@@ -2,30 +2,12 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
 	"github.com/ks888/hornet/common/log"
 )
-
-const (
-	// the internal APIs for the workers and no need to be RESTful so far.
-	nextTaskSetPath = "/next"
-)
-
-type nextTaskSetRequest struct {
-	WorkerID int64 `json:"worker_id"`
-}
-
-type nextTaskSetResponse struct {
-	JobID         int64    `json:"job_id"`
-	TaskSetID     int      `json:"task_set_id"`
-	TestFunctions []string `json:"test_functions"`
-	// The abs path in the manager fs.
-	DirPath string `json:"dir_path"`
-	// The path from the NFS root
-	TestBinaryPath string `json:"test_binary_path"`
-}
 
 // Manager manages the workers.
 type Manager struct {
@@ -77,6 +59,55 @@ func (m *Manager) AddJob(job *Job, depth int) {
 		}
 	}
 	m.jobs[job.ID] = job
+}
+
+// AddJob partitions the job and adds them to the scheduler.
+func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool, log []byte) error {
+	job, ok := m.jobs[jobID]
+	if !ok {
+		return fmt.Errorf("failed to find the job %d", jobID)
+	}
+
+	taskSet := job.TaskSets[taskSetID]
+	taskSet.Finish(successful, log)
+
+	// update tasks
+
+	// update profiler
+
+	if job.CanFinish() {
+		job.Finish()
+		delete(m.jobs, jobID)
+	}
+
+	return nil
+}
+
+const (
+	// the internal APIs for the workers and no need to be RESTful so far.
+	nextTaskSetPath = "/next"
+	reportPath      = "/report"
+)
+
+type nextTaskSetRequest struct {
+	WorkerID int64 `json:"worker_id"`
+}
+
+type nextTaskSetResponse struct {
+	JobID         int64    `json:"job_id"`
+	TaskSetID     int      `json:"task_set_id"`
+	TestFunctions []string `json:"test_functions"`
+	// The abs path in the manager fs.
+	DirPath string `json:"dir_path"`
+	// The path from the NFS root
+	TestBinaryPath string `json:"test_binary_path"`
+}
+
+type reportRequest struct {
+	JobID      int64  `json:"job_id"`
+	TaskSetID  int    `json:"task_set_id"`
+	Successful bool   `json:"successful"`
+	Log        []byte `json:"log"`
 }
 
 // ManagerServer serves some of the manager's function as the APIs so that the workers can use them.

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"go/build"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/ks888/hornet/common/log"
 )
 
 // Job represents the job to test one package.
@@ -158,8 +159,32 @@ func generateID() int64 {
 	return atomic.AddInt64(&jobIDCounter, 1)
 }
 
-// Finished is called when all the tasks are done.
-func (j *Job) Finished(successful bool) {
+// CanFinish returns true if all the task sets are done. False otherwise.
+func (j *Job) CanFinish() bool {
+	for _, taskSet := range j.TaskSets {
+		st := taskSet.Status
+		if st != TaskSetStatusSuccessful && st != TaskSetStatusFailed {
+			return false
+		}
+	}
+	return true
+}
+
+// Finish is called when all the tasks are done.
+func (j *Job) Finish() {
+	successful := true
+	for _, taskSet := range j.TaskSets {
+		st := taskSet.Status
+		if st == TaskSetStatusSuccessful {
+			continue
+		} else if st == TaskSetStatusFailed {
+			successful = false
+		} else {
+			log.Printf("can not finish the job %d yet\n", j.ID)
+			return
+		}
+	}
+
 	if successful {
 		j.Status = JobStatusSuccessful
 	} else {
@@ -169,7 +194,7 @@ func (j *Job) Finished(successful bool) {
 
 	joinedPath := filepath.Join(sharedDir, j.TestBinaryPath)
 	if err := os.Remove(joinedPath); err != nil {
-		log.Printf("failed to remove the test binary %s: %v\n", joinedPath, err)
+		log.Debugf("failed to remove the test binary %s: %v\n", joinedPath, err)
 	}
 }
 
@@ -200,7 +225,7 @@ func (s *TaskSet) Started(workerID int64) {
 	s.Status = TaskSetStatusStarted
 }
 
-func (s *TaskSet) Finished(successful bool, log []byte) {
+func (s *TaskSet) Finish(successful bool, log []byte) {
 	s.FinishedAt = time.Now()
 	if successful {
 		s.Status = TaskSetStatusSuccessful
@@ -228,7 +253,7 @@ const (
 	TaskStatusFailed
 )
 
-func (t *Task) Finished(successful bool, elapsedTime time.Duration) {
+func (t *Task) Finish(successful bool, elapsedTime time.Duration) {
 	if successful {
 		t.Status = TaskStatusSuccessful
 	} else {

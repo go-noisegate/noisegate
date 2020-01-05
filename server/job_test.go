@@ -130,7 +130,7 @@ func TestNewJobWithImportGraph(t *testing.T) {
 	}
 }
 
-func TestFinished(t *testing.T) {
+func TestFinish(t *testing.T) {
 	importPath := "github.com/ks888/hornet/server/testdata"
 	_, filename, _, _ := runtime.Caller(0)
 	dirPath := filepath.Join(filepath.Dir(filename), "testdata")
@@ -139,7 +139,7 @@ func TestFinished(t *testing.T) {
 		t.Fatalf("failed to create new job: %v", err)
 	}
 
-	job.Finished(true)
+	job.Finish()
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
 	}
@@ -159,10 +159,10 @@ func TestTaskSet_Started(t *testing.T) {
 	}
 }
 
-func TestTaskSet_Finished(t *testing.T) {
+func TestTaskSet_Finish(t *testing.T) {
 	set := TaskSet{Status: TaskSetStatusCreated}
 	log := "test log"
-	set.Finished(true, []byte(log))
+	set.Finish(true, []byte(log))
 	if set.Status != TaskSetStatusSuccessful {
 		t.Errorf("wrong status: %v", set.Status)
 	}
@@ -171,9 +171,9 @@ func TestTaskSet_Finished(t *testing.T) {
 	}
 }
 
-func TestTask_Finished(t *testing.T) {
+func TestTask_Finish(t *testing.T) {
 	task := Task{Status: TaskStatusCreated}
-	task.Finished(true, time.Second)
+	task.Finish(true, time.Second)
 	if task.Status != TaskStatusSuccessful {
 		t.Errorf("wrong status: %v", task.Status)
 	}
