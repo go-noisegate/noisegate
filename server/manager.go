@@ -87,9 +87,9 @@ func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool, goTe
 
 	if job.CanFinish() {
 		job.Finish()
+		m.addNextJobs(job)
 		delete(m.jobs, jobID)
 	}
-
 	return nil
 }
 
@@ -122,10 +122,14 @@ func (m *Manager) parseGoTestLog(goTestLog []byte) map[string]rawProfile {
 	return profiles
 }
 
+func (m *Manager) addNextJobs(job *Job) error {
+	return nil
+}
+
 const (
 	// the internal APIs for the workers and no need to be RESTful so far.
-	nextTaskSetPath = "/next"
-	reportPath      = "/report"
+	nextTaskSetPath  = "/next"
+	reportResultPath = "/report"
 )
 
 type nextTaskSetRequest struct {
@@ -142,7 +146,7 @@ type nextTaskSetResponse struct {
 	TestBinaryPath string `json:"test_binary_path"`
 }
 
-type reportRequest struct {
+type reportResultRequest struct {
 	JobID      int64  `json:"job_id"`
 	TaskSetID  int    `json:"task_set_id"`
 	Successful bool   `json:"successful"`
@@ -201,5 +205,21 @@ func (s ManagerServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request)
 	if err := enc.Encode(&resp); err != nil {
 		log.Printf("failed to encode the response: %v\n", err)
 		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+// handleReportResult handles the report result request.
+func (s ManagerServer) handleReportResult(w http.ResponseWriter, r *http.Request) {
+	var req reportResultRequest
+	rawBody, _ := ioutil.ReadAll(r.Body)
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if err := s.manager.ReportResult(req.JobID, req.TaskSetID, req.Successful, req.Log); err != nil {
+		log.Printf("failed to report the result: %v\n", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 }

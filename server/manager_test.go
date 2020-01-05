@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,34 +24,6 @@ func TestManager_AddJob(t *testing.T) {
 	}
 	if _, ok := manager.jobs[job.ID]; !ok {
 		t.Errorf("job is not stored: %d", job.ID)
-	}
-}
-
-func TestManager_ReportResult(t *testing.T) {
-	job := &Job{ID: 1}
-	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestManager_ReportResult", Job: job})
-	manager := NewManager()
-	manager.AddJob(job, 0)
-
-	taskSet := job.TaskSets[0]
-	err := manager.ReportResult(job.ID, taskSet.ID, true, []byte("=== RUN   TestManager_ReportResult\n--- PASS: TestManager_ReportResult (1.00s)"))
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if taskSet.Status != TaskSetStatusSuccessful {
-		t.Errorf("unexpected status: %v", taskSet.Status)
-	}
-	if job.Status != JobStatusSuccessful {
-		t.Errorf("unexpected status: %v", job.Status)
-	}
-	if _, ok := manager.jobs[job.ID]; ok {
-		t.Errorf("the job is not removed")
-	}
-	if job.Tasks[0].Status != TaskStatusSuccessful {
-		t.Errorf("unexpected status: %v", job.Tasks[0].Status)
-	}
-	if job.Tasks[0].ElapsedTime != time.Second {
-		t.Errorf("unexpected elapsed time: %v", job.Tasks[0].ElapsedTime)
 	}
 }
 
@@ -138,6 +111,70 @@ func TestManagerServer_HandleNextTaskSet_InvalidReqBody(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("unexpected status: %d", resp.Code)
+	}
+}
+
+func TestManagerServer_HandleReportResult(t *testing.T) {
+	job := &Job{ID: 1}
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestManager_ReportResult", Job: job})
+	manager := NewManager()
+	manager.AddJob(job, 0)
+
+	server := NewManagerServer("", manager)
+	reqBody := reportResultRequest{
+		JobID:      1,
+		TaskSetID:  0,
+		Successful: true,
+		Log:        []byte("=== RUN   TestManager_ReportResult\n--- PASS: TestManager_ReportResult (1.00s)"),
+	}
+	data, _ := json.Marshal(&reqBody)
+	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, bytes.NewReader(data))
+	resp := httptest.NewRecorder()
+	server.handleReportResult(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Errorf("unexpected status: %d", resp.Code)
+	}
+
+	taskSet := job.TaskSets[0]
+	if taskSet.Status != TaskSetStatusSuccessful {
+		t.Errorf("unexpected status: %v", taskSet.Status)
+	}
+	if job.Status != JobStatusSuccessful {
+		t.Errorf("unexpected status: %v", job.Status)
+	}
+	if _, ok := manager.jobs[job.ID]; ok {
+		t.Errorf("the job is not removed")
+	}
+	if job.Tasks[0].Status != TaskStatusSuccessful {
+		t.Errorf("unexpected status: %v", job.Tasks[0].Status)
+	}
+	if job.Tasks[0].ElapsedTime != time.Second {
+		t.Errorf("unexpected elapsed time: %v", job.Tasks[0].ElapsedTime)
+	}
+}
+
+func TestManagerServer_HandleReportResult_JobNotFound(t *testing.T) {
+	manager := NewManager()
+	server := NewManagerServer("", manager)
+	reqBody := reportResultRequest{JobID: 1, TaskSetID: 0, Successful: true}
+	data, _ := json.Marshal(&reqBody)
+	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, bytes.NewReader(data))
+	resp := httptest.NewRecorder()
+	server.handleReportResult(resp, req)
+	if resp.Code != http.StatusInternalServerError {
+		t.Errorf("unexpected status: %d", resp.Code)
+	}
+}
+
+func TestManagerServer_HandleReportResult_InvalidJSON(t *testing.T) {
+	manager := NewManager()
+	server := NewManagerServer("", manager)
+
+	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader("{"))
+	resp := httptest.NewRecorder()
+	server.handleReportResult(resp, req)
 	if resp.Code != http.StatusBadRequest {
 		t.Errorf("unexpected status: %d", resp.Code)
 	}
