@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestManager_AddJob(t *testing.T) {
@@ -27,12 +28,12 @@ func TestManager_AddJob(t *testing.T) {
 
 func TestManager_ReportResult(t *testing.T) {
 	job := &Job{ID: 1}
-	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestManager_ReportResult", Job: job})
 	manager := NewManager()
 	manager.AddJob(job, 0)
 
 	taskSet := job.TaskSets[0]
-	err := manager.ReportResult(job.ID, taskSet.ID, true, []byte("log"))
+	err := manager.ReportResult(job.ID, taskSet.ID, true, []byte("=== RUN   TestManager_ReportResult\n--- PASS: TestManager_ReportResult (1.00s)"))
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -44,6 +45,12 @@ func TestManager_ReportResult(t *testing.T) {
 	}
 	if _, ok := manager.jobs[job.ID]; ok {
 		t.Errorf("the job is not removed")
+	}
+	if job.Tasks[0].Status != TaskStatusSuccessful {
+		t.Errorf("unexpected status: %v", job.Tasks[0].Status)
+	}
+	if job.Tasks[0].ElapsedTime != time.Second {
+		t.Errorf("unexpected elapsed time: %v", job.Tasks[0].ElapsedTime)
 	}
 }
 

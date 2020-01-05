@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"regexp"
+	"time"
 
 	"github.com/ks888/hornet/common/log"
 )
@@ -61,19 +63,27 @@ func (m *Manager) AddJob(job *Job, depth int) {
 	m.jobs[job.ID] = job
 }
 
-// AddJob partitions the job and adds them to the scheduler.
-func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool, log []byte) error {
+// ReportResult reports the result and updates the statuses.
+func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool, goTestLog []byte) error {
 	job, ok := m.jobs[jobID]
 	if !ok {
 		return fmt.Errorf("failed to find the job %d", jobID)
 	}
 
+	rawProfiles := m.parseGoTestLog(goTestLog)
 	taskSet := job.TaskSets[taskSetID]
-	taskSet.Finish(successful, log)
+	for _, t := range taskSet.Tasks {
+		p, ok := rawProfiles[t.TestFunction]
+		if ok {
+			m.profiler.Add(job.DirPath, t.TestFunction, p.elapsedTime)
+			t.Finish(p.successful, p.elapsedTime)
+		} else {
+			log.Printf("failed to detect the result of %s. Consider it's same as the result of the task set (%v)\n", t.TestFunction, successful)
+			t.Finish(successful, 0)
+		}
+	}
 
-	// update tasks
-
-	// update profiler
+	taskSet.Finish(successful, goTestLog)
 
 	if job.CanFinish() {
 		job.Finish()
@@ -81,6 +91,35 @@ func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool, log 
 	}
 
 	return nil
+}
+
+type rawProfile struct {
+	testFuncName string
+	successful   bool
+	elapsedTime  time.Duration
+}
+
+var goTestLogRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL): (.+) \(([0-9.]+s)\)$`)
+
+func (m *Manager) parseGoTestLog(goTestLog []byte) map[string]rawProfile {
+	submatches := goTestLogRegexp.FindAllStringSubmatch(string(goTestLog), -1)
+
+	profiles := make(map[string]rawProfile)
+	for _, submatch := range submatches {
+		successful := true
+		if submatch[1] == "FAIL" {
+			successful = false
+		}
+		funcName := submatch[2]
+		d, err := time.ParseDuration(submatch[3])
+		if err != nil {
+			log.Printf("failed to parse go test log: %v", err)
+			continue
+		}
+
+		profiles[funcName] = rawProfile{funcName, successful, d}
+	}
+	return profiles
 }
 
 const (
