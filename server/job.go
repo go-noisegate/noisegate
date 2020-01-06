@@ -212,6 +212,7 @@ type TaskSet struct {
 	Log                   []byte
 	Tasks                 []*Task
 	WorkerID              int64
+	finishedCh            chan struct{}
 }
 
 // TaskSetStatus represents the status of the task set.
@@ -224,7 +225,16 @@ const (
 	TaskSetStatusFailed
 )
 
-func (s *TaskSet) Started(workerID int64) {
+// NewTaskSet returns the new task set.
+func NewTaskSet(id int) *TaskSet {
+	return &TaskSet{
+		ID:         id,
+		Status:     TaskSetStatusCreated,
+		finishedCh: make(chan struct{}),
+	}
+}
+
+func (s *TaskSet) Start(workerID int64) {
 	s.StartedAt = time.Now()
 	s.WorkerID = workerID
 	s.Status = TaskSetStatusStarted
@@ -238,6 +248,12 @@ func (s *TaskSet) Finish(successful bool, log []byte) {
 		s.Status = TaskSetStatusFailed
 	}
 	s.Log = log
+	close(s.finishedCh)
+}
+
+// WaitFinished waits until the task set finished.
+func (s *TaskSet) WaitFinished() {
+	<-s.finishedCh
 }
 
 // Task represents one test function.
@@ -289,7 +305,7 @@ func (p LPTPartitioner) Partition(tasks []*Task, numPartitions int) []*TaskSet {
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
 	taskSets := make([]*TaskSet, numPartitions)
 	for i := 0; i < numPartitions; i++ {
-		taskSets[i] = &TaskSet{ID: i, Status: TaskSetStatusCreated}
+		taskSets[i] = NewTaskSet(i)
 	}
 	totalExecTimes := make([]time.Duration, numPartitions)
 	for _, t := range sortedTasks {

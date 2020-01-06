@@ -47,7 +47,7 @@ func (m *Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err e
 		log.Printf("the task set %d has no tasks", taskSet.ID)
 	}
 
-	taskSet.Started(workerID)
+	taskSet.Start(workerID)
 	return
 }
 

@@ -137,9 +137,9 @@ func TestJob_Finish(t *testing.T) {
 	job.WaitFinished()
 }
 
-func TestTaskSet_Started(t *testing.T) {
-	set := TaskSet{Status: TaskSetStatusCreated}
-	set.Started(1)
+func TestTaskSet_Start(t *testing.T) {
+	set := NewTaskSet(1)
+	set.Start(1)
 	if set.Status != TaskSetStatusStarted {
 		t.Errorf("wrong status: %v", set.Status)
 	}
@@ -152,7 +152,7 @@ func TestTaskSet_Started(t *testing.T) {
 }
 
 func TestTaskSet_Finish(t *testing.T) {
-	set := TaskSet{Status: TaskSetStatusCreated}
+	set := NewTaskSet(1)
 	log := "test log"
 	set.Finish(true, []byte(log))
 	if set.Status != TaskSetStatusSuccessful {
@@ -161,6 +161,7 @@ func TestTaskSet_Finish(t *testing.T) {
 	if string(set.Log) != log {
 		t.Errorf("wrong log: %s", string(set.Log))
 	}
+	set.WaitFinished()
 }
 
 func TestTask_Finish(t *testing.T) {
