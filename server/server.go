@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 
@@ -60,17 +61,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func(taskSet *TaskSet) {
 			defer wg.Done()
-			taskSet.WaitFinished()
-
-			var result string
-			if taskSet.Status == TaskSetStatusSuccessful {
-				result = "PASS"
-			} else {
-				result = "FAIL"
-			}
-			fmt.Fprintf(w, "=== %s (job: %d, task set: %d, path: %s)\n", result, job.ID, taskSet.ID, job.DirPath)
-			fmt.Fprintf(w, "%s\n", string(taskSet.Log))
-			fmt.Fprintf(w, "Total time: %v\n", taskSet.FinishedAt.Sub(taskSet.StartedAt))
+			s.writeTaskSetLog(w, job, taskSet)
 			// Note that the data is not flushed if \n is not appended.
 			flusher.Flush()
 		}(taskSet)
@@ -78,10 +69,19 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 
 	wg.Wait()
 	job.WaitFinished()
+}
 
-	if job.Status == JobStatusSuccessful {
-		w.Write([]byte("successful\n"))
+func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {
+	taskSet.WaitFinished()
+
+	var result string
+	if taskSet.Status == TaskSetStatusSuccessful {
+		result = "PASS"
 	} else {
-		w.Write([]byte("failed\n"))
+		result = "FAIL"
 	}
+	// TODO: protect the writer.
+	fmt.Fprintf(w, "=== %s (job: %d, task set: %d, path: %s)\n", result, job.ID, taskSet.ID, job.DirPath)
+	fmt.Fprintf(w, "%s\n", string(taskSet.Log))
+	fmt.Fprintf(w, "Total time: %v\n", taskSet.FinishedAt.Sub(taskSet.StartedAt))
 }
