@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/ks888/hornet/common"
 	"github.com/ks888/hornet/common/log"
@@ -53,11 +55,28 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	s.manager.AddJob(job)
 
-	flusher = flusher
-	// Note that the data is not flushed if \n is not appended.
-	// fmt.Fprintf(w, "test %s...\n", input.Path)
-	// flusher.Flush()
+	var wg sync.WaitGroup
+	for _, taskSet := range job.TaskSets {
+		wg.Add(1)
+		go func(taskSet *TaskSet) {
+			defer wg.Done()
+			taskSet.WaitFinished()
 
+			var result string
+			if taskSet.Status == TaskSetStatusSuccessful {
+				result = "PASS"
+			} else {
+				result = "FAIL"
+			}
+			fmt.Fprintf(w, "=== %s (job: %d, task set: %d, path: %s)\n", result, job.ID, taskSet.ID, job.DirPath)
+			fmt.Fprintf(w, "%s\n", string(taskSet.Log))
+			fmt.Fprintf(w, "Total time: %v\n", taskSet.FinishedAt.Sub(taskSet.StartedAt))
+			// Note that the data is not flushed if \n is not appended.
+			flusher.Flush()
+		}(taskSet)
+	}
+
+	wg.Wait()
 	job.WaitFinished()
 
 	if job.Status == JobStatusSuccessful {

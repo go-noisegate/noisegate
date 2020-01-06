@@ -32,7 +32,7 @@ func TestHandleTest(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 
-		if err := manager.ReportResult(job.ID, taskSet.ID, true, nil); err != nil {
+		if err := manager.ReportResult(job.ID, taskSet.ID, true, []byte("ok")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	}()
@@ -46,7 +46,7 @@ func TestHandleTest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if string(out) != "successful\n" {
+	if !strings.HasPrefix(string(out), "=== PASS (job: 1, task set: 0, path: "+path+")\nok\nTotal time: ") {
 		t.Errorf("unexpected content: %s", string(out))
 	}
 }
