@@ -3,8 +3,10 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"go/build"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/ks888/hornet/common"
@@ -16,7 +18,8 @@ var sharedDir string
 // HornetServer serves the APIs for the cli client.
 type HornetServer struct {
 	*http.Server
-	manager *Manager
+	manager    *Manager
+	depthLimit int
 }
 
 // NewHornetServer returns the new hornet server.
@@ -36,11 +39,6 @@ func NewHornetServer(addr, dir string, manager *Manager) HornetServer {
 }
 
 func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		panic("http.Flusher is not implemented")
-	}
-
 	var input common.TestRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
@@ -48,12 +46,38 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	job, err := NewJob("", input.Path, 0)
-	if err != nil {
-		log.Printf("failed to generate a new job: %v\n", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	getImportGraph := s.asyncBuildImportGraph(input.Path)
+
+	var wg sync.WaitGroup
+	var handleJob func(path string, depth int)
+	handleJob = func(path string, depth int) {
+		job, err := NewJob("", path, depth)
+		if err != nil {
+			log.Printf("failed to generate a new job: %v\n", err)
+			return
+		}
+		s.runAndWaitJob(w, job)
+
+		if job.Status != JobStatusSuccessful || depth == s.depthLimit {
+			return
+		}
+
+		importGraph := getImportGraph()
+		for _, inbound := range importGraph.Inbounds[input.Path] {
+			inbound := inbound
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				handleJob(inbound, depth+1)
+			}()
+		}
 	}
+
+	handleJob(input.Path, 0)
+	wg.Wait()
+}
+
+func (s HornetServer) runAndWaitJob(w http.ResponseWriter, job *Job) {
 	s.manager.AddJob(job)
 
 	var wg sync.WaitGroup
@@ -63,12 +87,38 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 			defer wg.Done()
 			s.writeTaskSetLog(w, job, taskSet)
 			// Note that the data is not flushed if \n is not appended.
-			flusher.Flush()
+			w.(http.Flusher).Flush()
 		}(taskSet)
 	}
-
 	wg.Wait()
+
 	job.WaitFinished()
+}
+
+// asyncBuildImportGraph builds the import graph and returns the func to get the built import graph.
+// The returned func returns immediately if the import graph is available. Wait otherwise.
+func (s HornetServer) asyncBuildImportGraph(path string) (getImportGraph func() *ImportGraph) {
+	importGraphCh := make(chan *ImportGraph, 1)
+	go func() {
+		repoRoot, err := findRepoRoot(path)
+		if err != nil {
+			log.Printf("failed to find the repository root of %s: %v", path, err)
+			repoRoot = path
+		} else {
+			repoRoot = strings.TrimSpace(repoRoot)
+		}
+		ctxt := &build.Default
+		importGraph := BuildImportGraph(ctxt, repoRoot)
+		importGraphCh <- &importGraph
+	}()
+
+	var importGraph *ImportGraph
+	return func() *ImportGraph {
+		if importGraph == nil {
+			importGraph = <-importGraphCh
+		}
+		return importGraph
+	}
 }
 
 func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {

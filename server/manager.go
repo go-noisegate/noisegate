@@ -55,10 +55,20 @@ func (m *Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err e
 func (m *Manager) AddJob(job *Job) {
 	job.TaskSets = m.partitioner.Partition(job.Tasks, 1)
 	for _, taskSet := range job.TaskSets {
-		// TODO: finish the empty task set immediately
+		if len(taskSet.Tasks) == 0 {
+			taskSet.Finish(true, []byte("no tasks"))
+			continue
+		}
+
 		if err := m.scheduler.Add(taskSet, job.DependencyDepth); err != nil {
 			log.Printf("failed to add the new task set %v: %v", taskSet, err)
 		}
+	}
+
+	if job.CanFinish() {
+		// if all task sets have no tasks, we can finish the job here.
+		job.Finish()
+		return
 	}
 	m.jobs[job.ID] = job
 }
@@ -87,7 +97,6 @@ func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool, goTe
 
 	if job.CanFinish() {
 		job.Finish()
-		m.addNextJobs(job)
 		delete(m.jobs, jobID)
 	}
 	return nil
@@ -120,10 +129,6 @@ func (m *Manager) parseGoTestLog(goTestLog []byte) map[string]rawProfile {
 		profiles[funcName] = rawProfile{funcName, successful, d}
 	}
 	return profiles
-}
-
-func (m *Manager) addNextJobs(job *Job) error {
-	return nil
 }
 
 const (

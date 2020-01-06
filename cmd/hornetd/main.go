@@ -51,7 +51,8 @@ func runServer(addr string) error {
 	}
 	defer os.RemoveAll(sharedDir)
 
-	server := server.NewHornetServer(addr, sharedDir)
+	manager := server.NewManager()
+	server := server.NewHornetServer(addr, sharedDir, manager)
 	shutdownDoneCh := make(chan struct{})
 	go func() {
 		sigCh := make(chan os.Signal, 1)

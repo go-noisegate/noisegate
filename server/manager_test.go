@@ -27,6 +27,16 @@ func TestManager_AddJob(t *testing.T) {
 	}
 }
 
+func TestManager_AddJob_NoTasks(t *testing.T) {
+	job := &Job{ID: 1, finishedCh: make(chan struct{})}
+
+	manager := NewManager()
+	manager.AddJob(job)
+	if job.Status != JobStatusSuccessful {
+		t.Errorf("wrong status: %v", job.Status)
+	}
+}
+
 func TestManagerServer_HandleNextTaskSet(t *testing.T) {
 	manager := NewManager()
 	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary"}
