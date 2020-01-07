@@ -1,11 +1,14 @@
 package server
 
 import (
+	"archive/tar"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,11 +16,11 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	var err error
-	sharedDir, err = ioutil.TempDir("", "hornet")
+	dir, err := ioutil.TempDir("", "hornet")
 	if err != nil {
 		log.Fatalf("failed to create temp dir: %v", err)
 	}
+	setSharedDir(dir)
 
 	log.EnableDebugLog(true)
 
@@ -44,6 +47,13 @@ func TestNewJob(t *testing.T) {
 	if job.DependencyDepth != 1 {
 		t.Errorf("wrong dependency depth: %v", job.DependencyDepth)
 	}
+	if !strings.HasPrefix(job.TestBinaryPath, "bin/") {
+		t.Errorf("wrong path: %v", job.TestBinaryPath)
+	}
+	if !strings.HasPrefix(job.RepoArchivePath, "lib/") {
+		t.Errorf("wrong path: %v", job.RepoArchivePath)
+	}
+	checkArchiveContent(t, filepath.Join(sharedDir, job.RepoArchivePath), "./README.md")
 
 	expectedTasks := []Task{
 		{TestFunction: "TestSum", Job: job},
@@ -58,6 +68,29 @@ func TestNewJob(t *testing.T) {
 			t.Errorf("wrong task: %#v", actualTask)
 		}
 	}
+}
+
+func checkArchiveContent(t *testing.T, archivePath, filenameToCheck string) {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatalf("failed to open %s: %v", archivePath, err)
+	}
+
+	tarReader := tar.NewReader(f)
+	for {
+		header, err := tarReader.Next()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatalf("failed to check tar contents: %v", err)
+		}
+
+		if header.Name == filenameToCheck {
+			return
+		}
+	}
+	t.Errorf("can't find %s in %s", filenameToCheck, archivePath)
 }
 
 func TestNewJob_InvalidDirPath(t *testing.T) {

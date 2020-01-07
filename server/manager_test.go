@@ -11,7 +11,7 @@ import (
 )
 
 func TestManager_AddJob(t *testing.T) {
-	job := &Job{ID: 1}
+	job := &Job{ID: 1, finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 
 	manager := NewManager()
@@ -39,7 +39,7 @@ func TestManager_AddJob_NoTasks(t *testing.T) {
 
 func TestManagerServer_HandleNextTaskSet(t *testing.T) {
 	manager := NewManager()
-	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary"}
+	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary", finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	manager.AddJob(job)
 
@@ -91,10 +91,10 @@ func TestManagerServer_HandleNextTaskSet_NoTaskSet(t *testing.T) {
 
 func TestManagerServer_HandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 	manager := NewManager()
-	emptyJob := &Job{ID: 1}
+	emptyJob := &Job{ID: 1, finishedCh: make(chan struct{})}
 	manager.AddJob(emptyJob)
 
-	job := &Job{ID: 2}
+	job := &Job{ID: 2, finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	manager.AddJob(job)
 

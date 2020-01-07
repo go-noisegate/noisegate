@@ -23,12 +23,12 @@ type Job struct {
 	ImportPath, DirPath string
 	Status              JobStatus
 	// The path from the NFS root
-	TestBinaryPath        string
-	CreatedAt, FinishedAt time.Time
-	DependencyDepth       int
-	TaskSets              []*TaskSet
-	Tasks                 []*Task
-	finishedCh            chan struct{}
+	TestBinaryPath, RepoArchivePath string
+	CreatedAt, FinishedAt           time.Time
+	DependencyDepth                 int
+	TaskSets                        []*TaskSet
+	Tasks                           []*Task
+	finishedCh                      chan struct{}
 }
 
 // JobStatus represents the status of the job.
@@ -50,6 +50,11 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 		return nil, err
 	}
 
+	repoArchivePath, err := archiveRepository(dirPath, id)
+	if err != nil {
+		return nil, err
+	}
+
 	testFuncNames, err := retrieveTestFuncNames(dirPath)
 	if err != nil {
 		return nil, err
@@ -61,6 +66,7 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 		DirPath:         dirPath,
 		Status:          JobStatusCreated,
 		TestBinaryPath:  testBinaryPath,
+		RepoArchivePath: repoArchivePath,
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
 		finishedCh:      make(chan struct{}),
@@ -76,7 +82,7 @@ func findRepoRoot(dir string) (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	cmd.Dir = dir
 	out, err := cmd.Output()
-	return string(out), err
+	return strings.TrimSpace(string(out)), err
 }
 
 var errNoGoTestFiles = errors.New("no go test files (though there may be go files)")
@@ -84,8 +90,8 @@ var errNoGoTestFiles = errors.New("no go test files (though there may be go file
 var patternNoTestFiles = regexp.MustCompile(`(?m)\s+\[no test files\]$`)
 
 func buildTestBinary(dirPath string, jobID int64) (string, error) {
-	filename := strconv.FormatInt(jobID, 10)
-	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(sharedDir, filename), ".")
+	path := filepath.Join("bin", strconv.FormatInt(jobID, 10))
+	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(sharedDir, path), ".")
 	cmd.Env = append(os.Environ(), "GOOS=linux")
 	cmd.Dir = dirPath
 	buildLog, err := cmd.CombinedOutput()
@@ -99,7 +105,24 @@ func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	if matched := patternNoTestFiles.Match(buildLog); matched {
 		return "", errNoGoTestFiles
 	}
-	return filename, nil
+	return path, nil
+}
+
+func archiveRepository(dirPath string, jobID int64) (string, error) {
+	root, err := findRepoRoot(dirPath)
+	if err != nil {
+		return "", err
+	}
+
+	path := filepath.Join("lib", strconv.FormatInt(jobID, 10)+".tar")
+	cmd := exec.Command("tar", "-cf", filepath.Join(sharedDir, path), "--exclude=./.git/", ".")
+	cmd.Dir = root
+	archiveLog, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to archive: %w\nlog:\n%s", err, string(archiveLog))
+	}
+
+	return path, nil
 }
 
 var patternTestFuncName = regexp.MustCompile(`(?m)^ *func *(Test[^(]+)`)

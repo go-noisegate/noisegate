@@ -6,7 +6,8 @@ import (
 	"go/build"
 	"io"
 	"net/http"
-	"strings"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/ks888/hornet/common"
@@ -25,7 +26,7 @@ type HornetServer struct {
 // NewHornetServer returns the new hornet server.
 // We can use only one server instance in the process even if the address is different.
 func NewHornetServer(addr, dir string, manager *Manager) HornetServer {
-	sharedDir = dir
+	setSharedDir(dir)
 
 	s := HornetServer{manager: manager}
 
@@ -36,6 +37,12 @@ func NewHornetServer(addr, dir string, manager *Manager) HornetServer {
 		Addr:    addr,
 	}
 	return s
+}
+
+func setSharedDir(dir string) {
+	sharedDir = dir
+	os.Mkdir(filepath.Join(sharedDir, "bin"), os.ModePerm)
+	os.Mkdir(filepath.Join(sharedDir, "lib"), os.ModePerm)
 }
 
 func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
@@ -104,8 +111,6 @@ func (s HornetServer) asyncBuildImportGraph(path string) (getImportGraph func() 
 		if err != nil {
 			log.Printf("failed to find the repository root of %s: %v", path, err)
 			repoRoot = path
-		} else {
-			repoRoot = strings.TrimSpace(repoRoot)
 		}
 		ctxt := &build.Default
 		importGraph := BuildImportGraph(ctxt, repoRoot)
