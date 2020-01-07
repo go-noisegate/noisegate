@@ -58,14 +58,6 @@ func TestNewJob(t *testing.T) {
 			t.Errorf("wrong task: %#v", actualTask)
 		}
 	}
-
-	importGraph := <-job.ImportGraphCh
-	if importGraph.Root != filepath.Dir(filepath.Dir(filename)) {
-		t.Errorf("wrong root: %s", importGraph.Root)
-	}
-	if len(importGraph.Inbounds) == 0 {
-		t.Errorf("empty data")
-	}
 }
 
 func TestNewJob_InvalidDirPath(t *testing.T) {
@@ -115,6 +107,26 @@ func TestNewJob_NoGoFiles(t *testing.T) {
 	job, err := NewJob(importPath, dirPath, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
+	}
+	if job.TestBinaryPath != "" {
+		t.Errorf("test binary path is not empty")
+	}
+	if len(job.Tasks) != 0 {
+		t.Errorf("the dir has no go test functions: %d", len(job.Tasks))
+	}
+}
+
+func TestNewJob_NoGoTestFiles(t *testing.T) {
+	importPath := "github.com/ks888/hornet/server/testdata/no_go_test_files"
+	_, filename, _, _ := runtime.Caller(0)
+	dirPath := filepath.Join(filepath.Dir(filename), "testdata", "no_go_test_files")
+
+	job, err := NewJob(importPath, dirPath, 1)
+	if err != nil {
+		t.Fatalf("failed to create new job: %v", err)
+	}
+	if job.TestBinaryPath != "" {
+		t.Errorf("test binary path is not empty")
 	}
 	if len(job.Tasks) != 0 {
 		t.Errorf("the dir has no go test functions: %d", len(job.Tasks))

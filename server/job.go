@@ -3,7 +3,6 @@ package server
 import (
 	"errors"
 	"fmt"
-	"go/build"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -30,8 +29,6 @@ type Job struct {
 	TaskSets              []*TaskSet
 	Tasks                 []*Task
 	finishedCh            chan struct{}
-	// the channel to receive the import graph when ready.
-	ImportGraphCh chan ImportGraph
 }
 
 // JobStatus represents the status of the job.
@@ -47,7 +44,7 @@ const (
 func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 	id := generateID()
 	testBinaryPath, err := buildTestBinary(dirPath, id)
-	if err == errNoGoFiles {
+	if err == errNoGoTestFiles {
 		testBinaryPath = ""
 	} else if err != nil {
 		return nil, err
@@ -58,19 +55,6 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 		return nil, err
 	}
 
-	ch := make(chan ImportGraph, 1)
-	go func() {
-		repoRoot, err := findRepoRoot(dirPath)
-		if err != nil {
-			log.Printf("failed to find the repository root of %s: %v", dirPath, err)
-			repoRoot = dirPath
-		} else {
-			repoRoot = strings.TrimSpace(repoRoot)
-		}
-		ctxt := &build.Default
-		ch <- BuildImportGraph(ctxt, repoRoot)
-	}()
-
 	job := &Job{
 		ID:              id,
 		ImportPath:      importPath,
@@ -80,7 +64,6 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
 		finishedCh:      make(chan struct{}),
-		ImportGraphCh:   ch,
 	}
 
 	for _, testFuncName := range testFuncNames {
@@ -96,7 +79,9 @@ func findRepoRoot(dir string) (string, error) {
 	return string(out), err
 }
 
-var errNoGoFiles = errors.New("no go files")
+var errNoGoTestFiles = errors.New("no go test files (though there may be go files)")
+
+var patternNoTestFiles = regexp.MustCompile(`(?m)\s+\[no test files\]$`)
 
 func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	filename := strconv.FormatInt(jobID, 10)
@@ -106,9 +91,13 @@ func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	buildLog, err := cmd.CombinedOutput()
 	if err != nil {
 		if strings.HasPrefix(string(buildLog), "can't load package: package .: no Go files in ") {
-			return "", errNoGoFiles
+			return "", errNoGoTestFiles
 		}
 		return "", fmt.Errorf("failed to build: %w\nbuild log:\n%s", err, string(buildLog))
+	}
+
+	if matched := patternNoTestFiles.Match(buildLog); matched {
+		return "", errNoGoTestFiles
 	}
 	return filename, nil
 }
@@ -191,9 +180,11 @@ func (j *Job) Finish() {
 	}
 	j.FinishedAt = time.Now()
 
-	joinedPath := filepath.Join(sharedDir, j.TestBinaryPath)
-	if err := os.Remove(joinedPath); err != nil {
-		log.Debugf("failed to remove the test binary %s: %v\n", joinedPath, err)
+	if j.TestBinaryPath != "" {
+		joinedPath := filepath.Join(sharedDir, j.TestBinaryPath)
+		if err := os.Remove(joinedPath); err != nil {
+			log.Debugf("failed to remove the test binary %s: %v\n", joinedPath, err)
+		}
 	}
 	close(j.finishedCh)
 }
