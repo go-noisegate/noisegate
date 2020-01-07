@@ -11,10 +11,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/ks888/hornet/common/log"
+	"go.uber.org/multierr"
 )
 
 // Job represents the job to test one package.
@@ -43,20 +45,51 @@ const (
 // NewJob returns the new job.
 func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 	id := generateID()
-	testBinaryPath, err := buildTestBinary(dirPath, id)
-	if err == errNoGoTestFiles {
-		testBinaryPath = ""
-	} else if err != nil {
-		return nil, err
-	}
+	errCh := make(chan error)
+	binaryPathCh := make(chan string, 1) // to avoid go routine leaks
+	archivePathCh := make(chan string, 1)
+	funcNamesCh := make(chan []string, 1)
 
-	repoArchivePath, err := archiveRepository(dirPath, id)
-	if err != nil {
-		return nil, err
-	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		testBinaryPath, err := buildTestBinary(dirPath, id)
+		if err == errNoGoTestFiles {
+			err = nil
+			testBinaryPath = ""
+		}
+		errCh <- err
+		binaryPathCh <- testBinaryPath
+	}()
 
-	testFuncNames, err := retrieveTestFuncNames(dirPath)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		repoArchivePath, err := archiveRepository(dirPath, id)
+		errCh <- err
+		archivePathCh <- repoArchivePath
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		testFuncNames, err := retrieveTestFuncNames(dirPath)
+		errCh <- err
+		funcNamesCh <- testFuncNames
+	}()
+
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	var err error
+	for e := range errCh {
+		err = multierr.Combine(err, e)
+	}
 	if err != nil {
+		// TODO: remove created files
 		return nil, err
 	}
 
@@ -65,14 +98,14 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 		ImportPath:      importPath,
 		DirPath:         dirPath,
 		Status:          JobStatusCreated,
-		TestBinaryPath:  testBinaryPath,
-		RepoArchivePath: repoArchivePath,
+		TestBinaryPath:  <-binaryPathCh,
+		RepoArchivePath: <-archivePathCh,
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
 		finishedCh:      make(chan struct{}),
 	}
 
-	for _, testFuncName := range testFuncNames {
+	for _, testFuncName := range <-funcNamesCh {
 		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: job})
 	}
 	return job, nil
