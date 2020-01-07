@@ -179,6 +179,12 @@ func TestJob_Finish(t *testing.T) {
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
 	}
+	if _, err := os.Stat(filepath.Join(sharedDir, job.TestBinaryPath)); !os.IsNotExist(err) {
+		t.Errorf("test binary still exist: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(sharedDir, job.RepoArchivePath)); !os.IsNotExist(err) {
+		t.Errorf("archive still exist: %v", err)
+	}
 	job.WaitFinished()
 }
 

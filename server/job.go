@@ -111,7 +111,8 @@ func buildTestBinary(dirPath string, jobID int64) (string, error) {
 func archiveRepository(dirPath string, jobID int64) (string, error) {
 	root, err := findRepoRoot(dirPath)
 	if err != nil {
-		return "", err
+		log.Debugf("failed to find the repo root of %s: %v", dirPath, err)
+		root = dirPath
 	}
 
 	path := filepath.Join("lib", strconv.FormatInt(jobID, 10)+".tar")
@@ -204,11 +205,17 @@ func (j *Job) Finish() {
 	j.FinishedAt = time.Now()
 
 	if j.TestBinaryPath != "" {
-		joinedPath := filepath.Join(sharedDir, j.TestBinaryPath)
-		if err := os.Remove(joinedPath); err != nil {
-			log.Debugf("failed to remove the test binary %s: %v\n", joinedPath, err)
+		absPath := filepath.Join(sharedDir, j.TestBinaryPath)
+		if err := os.Remove(absPath); err != nil {
+			log.Debugf("failed to remove the test binary %s: %v\n", absPath, err)
 		}
 	}
+
+	absPath := filepath.Join(sharedDir, j.RepoArchivePath)
+	if err := os.Remove(absPath); err != nil {
+		log.Debugf("failed to remove the archive %s: %v\n", absPath, err)
+	}
+
 	close(j.finishedCh)
 }
 
