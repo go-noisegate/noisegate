@@ -204,13 +204,9 @@ func TestTaskSet_Start(t *testing.T) {
 
 func TestTaskSet_Finish(t *testing.T) {
 	set := NewTaskSet(1)
-	log := "test log"
-	set.Finish(true, []byte(log))
+	set.Finish(true)
 	if set.Status != TaskSetStatusSuccessful {
 		t.Errorf("wrong status: %v", set.Status)
-	}
-	if string(set.Log) != log {
-		t.Errorf("wrong log: %s", string(set.Log))
 	}
 	set.WaitFinished()
 }

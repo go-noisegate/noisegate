@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,7 +40,7 @@ func TestManager_AddJob_NoTasks(t *testing.T) {
 
 func TestManagerServer_HandleNextTaskSet(t *testing.T) {
 	manager := NewManager()
-	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary", finishedCh: make(chan struct{})}
+	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary", RepoArchivePath: "/path/to/archive", finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	manager.AddJob(job)
 
@@ -69,6 +70,9 @@ func TestManagerServer_HandleNextTaskSet(t *testing.T) {
 		t.Errorf("unexpected dir path: %s", decodedResp.DirPath)
 	}
 	if decodedResp.TestBinaryPath != "/path/to/binary" {
+		t.Errorf("unexpected test binary path: %s", decodedResp.TestBinaryPath)
+	}
+	if decodedResp.RepoArchivePath != "/path/to/archive" {
 		t.Errorf("unexpected test binary path: %s", decodedResp.TestBinaryPath)
 	}
 
@@ -132,15 +136,20 @@ func TestManagerServer_HandleReportResult(t *testing.T) {
 	manager := NewManager()
 	manager.AddJob(job)
 
+	logContent := "=== RUN   TestManager_ReportResult\n--- PASS: TestManager_ReportResult (1.00s)"
+	err := ioutil.WriteFile(job.TaskSets[0].LogPath, []byte(logContent), 0644)
+	if err != nil {
+		t.Fatalf("failed to write log %s: %v", job.TaskSets[0].LogPath, err)
+	}
+
 	server := NewManagerServer("", manager)
 	reqBody := reportResultRequest{
 		JobID:      1,
 		TaskSetID:  0,
 		Successful: true,
-		Log:        []byte("=== RUN   TestManager_ReportResult\n--- PASS: TestManager_ReportResult (1.00s)"),
 	}
 	data, _ := json.Marshal(&reqBody)
-	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, bytes.NewReader(data))
+	req := httptest.NewRequest(http.MethodGet, reportResultPath, bytes.NewReader(data))
 	resp := httptest.NewRecorder()
 	server.handleReportResult(resp, req)
 	if resp.Code != http.StatusOK {

@@ -263,10 +263,11 @@ type TaskSet struct {
 	ID                    int
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
-	Log                   []byte
-	Tasks                 []*Task
-	WorkerID              int64
-	finishedCh            chan struct{}
+	// The path from the NFS root
+	LogPath    string
+	Tasks      []*Task
+	WorkerID   int64
+	finishedCh chan struct{}
 }
 
 // TaskSetStatus represents the status of the task set.
@@ -284,6 +285,7 @@ func NewTaskSet(id int) *TaskSet {
 	return &TaskSet{
 		ID:         id,
 		Status:     TaskSetStatusCreated,
+		LogPath:    "",
 		finishedCh: make(chan struct{}),
 	}
 }
@@ -294,14 +296,13 @@ func (s *TaskSet) Start(workerID int64) {
 	s.Status = TaskSetStatusStarted
 }
 
-func (s *TaskSet) Finish(successful bool, log []byte) {
+func (s *TaskSet) Finish(successful bool) {
 	s.FinishedAt = time.Now()
 	if successful {
 		s.Status = TaskSetStatusSuccessful
 	} else {
 		s.Status = TaskSetStatusFailed
 	}
-	s.Log = log
 	close(s.finishedCh)
 }
 

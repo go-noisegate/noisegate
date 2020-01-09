@@ -97,7 +97,7 @@ func executeTaskSet(t *testing.T, manager *Manager) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if err := manager.ReportResult(job.ID, taskSet.ID, true, []byte("ok")); err != nil {
+	if err := manager.ReportResult(job.ID, taskSet.ID, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

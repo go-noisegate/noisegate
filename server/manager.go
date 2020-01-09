@@ -56,7 +56,7 @@ func (m *Manager) AddJob(job *Job) {
 	job.TaskSets = m.partitioner.Partition(job.Tasks, 1)
 	for _, taskSet := range job.TaskSets {
 		if len(taskSet.Tasks) == 0 {
-			taskSet.Finish(true, []byte("no tasks"))
+			taskSet.Finish(true)
 			continue
 		}
 
@@ -74,14 +74,14 @@ func (m *Manager) AddJob(job *Job) {
 }
 
 // ReportResult reports the result and updates the statuses.
-func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool, goTestLog []byte) error {
+func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool) error {
 	job, ok := m.jobs[jobID]
 	if !ok {
 		return fmt.Errorf("failed to find the job %d", jobID)
 	}
 
-	rawProfiles := m.parseGoTestLog(goTestLog)
 	taskSet := job.TaskSets[taskSetID]
+	rawProfiles := m.parseGoTestLog(taskSet.LogPath)
 	for _, t := range taskSet.Tasks {
 		p, ok := rawProfiles[t.TestFunction]
 		if ok {
@@ -93,7 +93,7 @@ func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool, goTe
 		}
 	}
 
-	taskSet.Finish(successful, goTestLog)
+	taskSet.Finish(successful)
 
 	if job.CanFinish() {
 		job.Finish()
@@ -110,10 +110,16 @@ type rawProfile struct {
 
 var goTestLogRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL): (.+) \(([0-9.]+s)\)$`)
 
-func (m *Manager) parseGoTestLog(goTestLog []byte) map[string]rawProfile {
-	submatches := goTestLogRegexp.FindAllStringSubmatch(string(goTestLog), -1)
-
+func (m *Manager) parseGoTestLog(logPath string) map[string]rawProfile {
 	profiles := make(map[string]rawProfile)
+
+	goTestLog, err := ioutil.ReadFile(logPath)
+	if err != nil {
+		log.Debugf("failed to read the log file %s: %v", logPath, err)
+		return profiles
+	}
+
+	submatches := goTestLogRegexp.FindAllStringSubmatch(string(goTestLog), -1)
 	for _, submatch := range submatches {
 		successful := true
 		if submatch[1] == "FAIL" {
@@ -149,13 +155,14 @@ type nextTaskSetResponse struct {
 	DirPath string `json:"dir_path"`
 	// The path from the NFS root
 	TestBinaryPath string `json:"test_binary_path"`
+	// The path from the NFS root
+	RepoArchivePath string `json:"repo_archive_path"`
 }
 
 type reportResultRequest struct {
-	JobID      int64  `json:"job_id"`
-	TaskSetID  int    `json:"task_set_id"`
-	Successful bool   `json:"successful"`
-	Log        []byte `json:"log"`
+	JobID      int64 `json:"job_id"`
+	TaskSetID  int   `json:"task_set_id"`
+	Successful bool  `json:"successful"`
 }
 
 // ManagerServer serves some of the manager's function as the APIs so that the workers can use them.
@@ -198,10 +205,11 @@ func (s ManagerServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request)
 	}
 
 	resp := &nextTaskSetResponse{
-		JobID:          job.ID,
-		TaskSetID:      taskSet.ID,
-		DirPath:        job.DirPath,
-		TestBinaryPath: job.TestBinaryPath,
+		JobID:           job.ID,
+		TaskSetID:       taskSet.ID,
+		DirPath:         job.DirPath,
+		TestBinaryPath:  job.TestBinaryPath,
+		RepoArchivePath: job.RepoArchivePath,
 	}
 	for _, t := range taskSet.Tasks {
 		resp.TestFunctions = append(resp.TestFunctions, t.TestFunction)
@@ -223,7 +231,7 @@ func (s ManagerServer) handleReportResult(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := s.manager.ReportResult(req.JobID, req.TaskSetID, req.Successful, req.Log); err != nil {
+	if err := s.manager.ReportResult(req.JobID, req.TaskSetID, req.Successful); err != nil {
 		log.Printf("failed to report the result: %v\n", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return

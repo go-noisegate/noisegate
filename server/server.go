@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"go/build"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -137,6 +138,11 @@ func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {
 	}
 	// TODO: protect the writer.
 	fmt.Fprintf(w, "=== %s (job: %d, task set: %d, path: %s)\n", result, job.ID, taskSet.ID, job.DirPath)
-	fmt.Fprintf(w, "%s\n", string(taskSet.Log))
+	content, err := ioutil.ReadFile(taskSet.LogPath)
+	if err != nil {
+		log.Debugf("failed to read the log file %s: %v", taskSet.LogPath, err)
+	} else {
+		fmt.Fprintf(w, "%s\n", string(content))
+	}
 	fmt.Fprintf(w, "Total time: %v\n", taskSet.FinishedAt.Sub(taskSet.StartedAt))
 }
