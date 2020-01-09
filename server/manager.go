@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"time"
 
@@ -53,7 +54,7 @@ func (m *Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err e
 
 // AddJob partitions the job into the task sets and adds them to the scheduler.
 func (m *Manager) AddJob(job *Job) {
-	job.TaskSets = m.partitioner.Partition(job.Tasks, 1)
+	job.TaskSets = m.partitioner.Partition(job, 1)
 	for _, taskSet := range job.TaskSets {
 		if len(taskSet.Tasks) == 0 {
 			taskSet.Finish(true)
@@ -81,7 +82,7 @@ func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool) erro
 	}
 
 	taskSet := job.TaskSets[taskSetID]
-	rawProfiles := m.parseGoTestLog(taskSet.LogPath)
+	rawProfiles := m.parseGoTestLog(filepath.Join(sharedDir, taskSet.LogPath))
 	for _, t := range taskSet.Tasks {
 		p, ok := rawProfiles[t.TestFunction]
 		if ok {

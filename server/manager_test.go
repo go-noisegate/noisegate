@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -137,7 +138,7 @@ func TestManagerServer_HandleReportResult(t *testing.T) {
 	manager.AddJob(job)
 
 	logContent := "=== RUN   TestManager_ReportResult\n--- PASS: TestManager_ReportResult (1.00s)"
-	err := ioutil.WriteFile(job.TaskSets[0].LogPath, []byte(logContent), 0644)
+	err := ioutil.WriteFile(filepath.Join(sharedDir, job.TaskSets[0].LogPath), []byte(logContent), 0644)
 	if err != nil {
 		t.Fatalf("failed to write log %s: %v", job.TaskSets[0].LogPath, err)
 	}

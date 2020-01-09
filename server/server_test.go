@@ -97,6 +97,11 @@ func executeTaskSet(t *testing.T, manager *Manager) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	err := ioutil.WriteFile(filepath.Join(sharedDir, taskSet.LogPath), []byte("ok"), 0644)
+	if err != nil {
+		t.Fatalf("failed to write log %s: %v", taskSet.LogPath, err)
+	}
+
 	if err := manager.ReportResult(job.ID, taskSet.ID, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -24,7 +24,7 @@ type Job struct {
 	ID                  int64
 	ImportPath, DirPath string
 	Status              JobStatus
-	// The path from the NFS root
+	// The path from the shared dir
 	TestBinaryPath, RepoArchivePath string
 	CreatedAt, FinishedAt           time.Time
 	DependencyDepth                 int
@@ -249,6 +249,13 @@ func (j *Job) Finish() {
 		log.Debugf("failed to remove the archive %s: %v\n", absPath, err)
 	}
 
+	for _, taskSet := range j.TaskSets {
+		absPath := filepath.Join(sharedDir, taskSet.LogPath)
+		if err := os.Remove(absPath); err != nil {
+			log.Debugf("failed to remove the log file %s: %v\n", absPath, err)
+		}
+	}
+
 	close(j.finishedCh)
 }
 
@@ -263,7 +270,7 @@ type TaskSet struct {
 	ID                    int
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
-	// The path from the NFS root
+	// The path from the shared dir
 	LogPath    string
 	Tasks      []*Task
 	WorkerID   int64
@@ -281,11 +288,11 @@ const (
 )
 
 // NewTaskSet returns the new task set.
-func NewTaskSet(id int) *TaskSet {
+func NewTaskSet(id int, job *Job) *TaskSet {
 	return &TaskSet{
 		ID:         id,
 		Status:     TaskSetStatusCreated,
-		LogPath:    "",
+		LogPath:    filepath.Join("log", fmt.Sprintf("%d_%d", job.ID, id)),
 		finishedCh: make(chan struct{}),
 	}
 }
@@ -354,13 +361,13 @@ type taskWithExecTime struct {
 }
 
 // Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(tasks []*Task, numPartitions int) []*TaskSet {
-	sortedTasks, noProfileTasks := p.sortByExecTime(tasks)
+func (p LPTPartitioner) Partition(job *Job, numPartitions int) []*TaskSet {
+	sortedTasks, noProfileTasks := p.sortByExecTime(job.Tasks)
 
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
 	taskSets := make([]*TaskSet, numPartitions)
 	for i := 0; i < numPartitions; i++ {
-		taskSets[i] = NewTaskSet(i)
+		taskSets[i] = NewTaskSet(i, job)
 	}
 	totalExecTimes := make([]time.Duration, numPartitions)
 	for _, t := range sortedTasks {
