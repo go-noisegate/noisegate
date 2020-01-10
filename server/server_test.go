@@ -14,7 +14,7 @@ import (
 )
 
 func TestHandleTest_Depth0(t *testing.T) {
-	manager := NewManager()
+	manager := NewJobManager()
 	server := NewHornetServer("", sharedDir, manager)
 
 	_, filename, _, _ := runtime.Caller(0)
@@ -42,7 +42,7 @@ func TestHandleTest_Depth0(t *testing.T) {
 }
 
 func TestHandleTest_Depth1(t *testing.T) {
-	manager := NewManager()
+	manager := NewJobManager()
 	server := NewHornetServer("", sharedDir, manager)
 	server.depthLimit = 1
 
@@ -73,7 +73,7 @@ func TestHandleTest_Depth1(t *testing.T) {
 }
 
 func TestHandleTest_EmptyBody(t *testing.T) {
-	manager := NewManager()
+	manager := NewJobManager()
 	server := NewHornetServer("", "", manager)
 
 	req := httptest.NewRequest("GET", "/test", nil)
@@ -85,7 +85,7 @@ func TestHandleTest_EmptyBody(t *testing.T) {
 	}
 }
 
-func executeTaskSet(t *testing.T, manager *Manager) {
+func executeTaskSet(t *testing.T, manager *JobManager) {
 	var job *Job
 	var taskSet *TaskSet
 	for {

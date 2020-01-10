@@ -20,13 +20,13 @@ var sharedDir string
 // HornetServer serves the APIs for the cli client.
 type HornetServer struct {
 	*http.Server
-	manager    *Manager
+	manager    *JobManager
 	depthLimit int
 }
 
 // NewHornetServer returns the new hornet server.
 // We can use only one server instance in the process even if the address is different.
-func NewHornetServer(addr, dir string, manager *Manager) HornetServer {
+func NewHornetServer(addr, dir string, manager *JobManager) HornetServer {
 	setSharedDir(dir)
 
 	s := HornetServer{manager: manager}

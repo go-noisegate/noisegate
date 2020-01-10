@@ -12,21 +12,19 @@ import (
 	"github.com/ks888/hornet/common/log"
 )
 
-// Manager manages the workers.
-type Manager struct {
+// JobManager manages the jobs.
+type JobManager struct {
 	scheduler   taskSetScheduler
 	profiler    *SimpleProfiler
 	partitioner LPTPartitioner
 	jobs        map[int64]*Job
 }
 
-type Worker struct{}
-
-// NewManager returns the new manager.
-func NewManager() *Manager {
+// NewJobManager returns the new job manager.
+func NewJobManager() *JobManager {
 	profiler := NewSimpleProfiler()
 	partitioner := NewLPTPartitioner(profiler)
-	return &Manager{
+	return &JobManager{
 		profiler:    profiler,
 		partitioner: partitioner,
 		jobs:        make(map[int64]*Job),
@@ -34,7 +32,7 @@ func NewManager() *Manager {
 }
 
 // NextTaskSet returns the runnable task set.
-func (m *Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err error) {
+func (m *JobManager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err error) {
 	for {
 		taskSet, err = m.scheduler.Next()
 		if err != nil {
@@ -53,7 +51,7 @@ func (m *Manager) NextTaskSet(workerID int64) (job *Job, taskSet *TaskSet, err e
 }
 
 // AddJob partitions the job into the task sets and adds them to the scheduler.
-func (m *Manager) AddJob(job *Job) {
+func (m *JobManager) AddJob(job *Job) {
 	job.TaskSets = m.partitioner.Partition(job, 1)
 	for _, taskSet := range job.TaskSets {
 		if len(taskSet.Tasks) == 0 {
@@ -75,7 +73,7 @@ func (m *Manager) AddJob(job *Job) {
 }
 
 // ReportResult reports the result and updates the statuses.
-func (m *Manager) ReportResult(jobID int64, taskSetID int, successful bool) error {
+func (m *JobManager) ReportResult(jobID int64, taskSetID int, successful bool) error {
 	job, ok := m.jobs[jobID]
 	if !ok {
 		return fmt.Errorf("failed to find the job %d", jobID)
@@ -111,7 +109,7 @@ type rawProfile struct {
 
 var goTestLogRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL): (.+) \(([0-9.]+s)\)$`)
 
-func (m *Manager) parseGoTestLog(logPath string) map[string]rawProfile {
+func (m *JobManager) parseGoTestLog(logPath string) map[string]rawProfile {
 	profiles := make(map[string]rawProfile)
 
 	goTestLog, err := ioutil.ReadFile(logPath)
@@ -166,15 +164,15 @@ type reportResultRequest struct {
 	Successful bool  `json:"successful"`
 }
 
-// ManagerServer serves some of the manager's function as the APIs so that the workers can use them.
-type ManagerServer struct {
+// JobServer serves some of the job manager's function as the APIs so that the workers can use them.
+type JobServer struct {
 	*http.Server
-	manager *Manager
+	manager *JobManager
 }
 
-// NewManagerServer returns the new manager server.
-func NewManagerServer(addr string, manager *Manager) ManagerServer {
-	s := ManagerServer{manager: manager}
+// NewJobServer returns the new job server.
+func NewJobServer(addr string, manager *JobManager) JobServer {
+	s := JobServer{manager: manager}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(nextTaskSetPath, s.handleNextTaskSet)
@@ -186,7 +184,7 @@ func NewManagerServer(addr string, manager *Manager) ManagerServer {
 }
 
 // handleNextTaskSet handles the next task set request.
-func (s ManagerServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
+func (s JobServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
 	var req nextTaskSetRequest
 	rawBody, _ := ioutil.ReadAll(r.Body)
 	if err := json.Unmarshal(rawBody, &req); err != nil {
@@ -224,7 +222,7 @@ func (s ManagerServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request)
 }
 
 // handleReportResult handles the report result request.
-func (s ManagerServer) handleReportResult(w http.ResponseWriter, r *http.Request) {
+func (s JobServer) handleReportResult(w http.ResponseWriter, r *http.Request) {
 	var req reportResultRequest
 	rawBody, _ := ioutil.ReadAll(r.Body)
 	if err := json.Unmarshal(rawBody, &req); err != nil {

@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-func TestManager_AddJob(t *testing.T) {
+func TestJobManager_AddJob(t *testing.T) {
 	job := &Job{ID: 1, finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 
-	manager := NewManager()
+	manager := NewJobManager()
 	manager.AddJob(job)
 	if len(job.TaskSets) != 1 {
 		t.Errorf("wrong number of task sets: %d", len(job.TaskSets))
@@ -29,23 +29,23 @@ func TestManager_AddJob(t *testing.T) {
 	}
 }
 
-func TestManager_AddJob_NoTasks(t *testing.T) {
+func TestJobManager_AddJob_NoTasks(t *testing.T) {
 	job := &Job{ID: 1, finishedCh: make(chan struct{})}
 
-	manager := NewManager()
+	manager := NewJobManager()
 	manager.AddJob(job)
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
 	}
 }
 
-func TestManagerServer_HandleNextTaskSet(t *testing.T) {
-	manager := NewManager()
+func TestJobServer_HandleNextTaskSet(t *testing.T) {
+	manager := NewJobManager()
 	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary", RepoArchivePath: "/path/to/archive", finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	manager.AddJob(job)
 
-	server := NewManagerServer("", manager)
+	server := NewJobServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{"worker_id": 1}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -82,9 +82,9 @@ func TestManagerServer_HandleNextTaskSet(t *testing.T) {
 	}
 }
 
-func TestManagerServer_HandleNextTaskSet_NoTaskSet(t *testing.T) {
-	manager := NewManager()
-	server := NewManagerServer("", manager)
+func TestJobServer_HandleNextTaskSet_NoTaskSet(t *testing.T) {
+	manager := NewJobManager()
+	server := NewJobServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -94,8 +94,8 @@ func TestManagerServer_HandleNextTaskSet_NoTaskSet(t *testing.T) {
 	}
 }
 
-func TestManagerServer_HandleNextTaskSet_EmptyTaskSet(t *testing.T) {
-	manager := NewManager()
+func TestJobServer_HandleNextTaskSet_EmptyTaskSet(t *testing.T) {
+	manager := NewJobManager()
 	emptyJob := &Job{ID: 1, finishedCh: make(chan struct{})}
 	manager.AddJob(emptyJob)
 
@@ -103,7 +103,7 @@ func TestManagerServer_HandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	manager.AddJob(job)
 
-	server := NewManagerServer("", manager)
+	server := NewJobServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -120,9 +120,9 @@ func TestManagerServer_HandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 	}
 }
 
-func TestManagerServer_HandleNextTaskSet_InvalidReqBody(t *testing.T) {
-	manager := NewManager()
-	server := NewManagerServer("", manager)
+func TestJobServer_HandleNextTaskSet_InvalidReqBody(t *testing.T) {
+	manager := NewJobManager()
+	server := NewJobServer("", manager)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader(`{`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -131,19 +131,19 @@ func TestManagerServer_HandleNextTaskSet_InvalidReqBody(t *testing.T) {
 	}
 }
 
-func TestManagerServer_HandleReportResult(t *testing.T) {
+func TestJobServer_HandleReportResult(t *testing.T) {
 	job := &Job{ID: 1, finishedCh: make(chan struct{})}
-	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestManager_ReportResult", Job: job})
-	manager := NewManager()
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestJobManager_ReportResult", Job: job})
+	manager := NewJobManager()
 	manager.AddJob(job)
 
-	logContent := "=== RUN   TestManager_ReportResult\n--- PASS: TestManager_ReportResult (1.00s)"
+	logContent := "=== RUN   TestJobManager_ReportResult\n--- PASS: TestJobManager_ReportResult (1.00s)"
 	err := ioutil.WriteFile(filepath.Join(sharedDir, job.TaskSets[0].LogPath), []byte(logContent), 0644)
 	if err != nil {
 		t.Fatalf("failed to write log %s: %v", job.TaskSets[0].LogPath, err)
 	}
 
-	server := NewManagerServer("", manager)
+	server := NewJobServer("", manager)
 	reqBody := reportResultRequest{
 		JobID:      1,
 		TaskSetID:  0,
@@ -175,9 +175,9 @@ func TestManagerServer_HandleReportResult(t *testing.T) {
 	}
 }
 
-func TestManagerServer_HandleReportResult_JobNotFound(t *testing.T) {
-	manager := NewManager()
-	server := NewManagerServer("", manager)
+func TestJobServer_HandleReportResult_JobNotFound(t *testing.T) {
+	manager := NewJobManager()
+	server := NewJobServer("", manager)
 	reqBody := reportResultRequest{JobID: 1, TaskSetID: 0, Successful: true}
 	data, _ := json.Marshal(&reqBody)
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, bytes.NewReader(data))
@@ -188,9 +188,9 @@ func TestManagerServer_HandleReportResult_JobNotFound(t *testing.T) {
 	}
 }
 
-func TestManagerServer_HandleReportResult_InvalidJSON(t *testing.T) {
-	manager := NewManager()
-	server := NewManagerServer("", manager)
+func TestJobServer_HandleReportResult_InvalidJSON(t *testing.T) {
+	manager := NewJobManager()
+	server := NewJobServer("", manager)
 
 	req := httptest.NewRequest(http.MethodGet, nextTaskSetPath, strings.NewReader("{"))
 	resp := httptest.NewRecorder()
