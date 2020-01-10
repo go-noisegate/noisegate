@@ -1,10 +1,8 @@
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"path/filepath"
 	"regexp"
 	"time"
@@ -134,105 +132,4 @@ func (m *JobManager) parseGoTestLog(logPath string) map[string]rawProfile {
 		profiles[funcName] = rawProfile{funcName, successful, d}
 	}
 	return profiles
-}
-
-const (
-	// the internal APIs for the workers and no need to be RESTful so far.
-	nextTaskSetPath  = "/next"
-	reportResultPath = "/report"
-)
-
-type nextTaskSetRequest struct {
-	WorkerID int64 `json:"worker_id"`
-}
-
-type nextTaskSetResponse struct {
-	JobID         int64    `json:"job_id"`
-	TaskSetID     int      `json:"task_set_id"`
-	TestFunctions []string `json:"test_functions"`
-	// The abs path in the manager fs.
-	DirPath string `json:"dir_path"`
-	// The path from the NFS root
-	TestBinaryPath string `json:"test_binary_path"`
-	// The path from the NFS root
-	RepoArchivePath string `json:"repo_archive_path"`
-}
-
-type reportResultRequest struct {
-	JobID      int64 `json:"job_id"`
-	TaskSetID  int   `json:"task_set_id"`
-	Successful bool  `json:"successful"`
-}
-
-// JobServer serves some of the job manager's function as the APIs so that the workers can use them.
-type JobServer struct {
-	*http.Server
-	manager *JobManager
-}
-
-// NewJobServer returns the new job server.
-func NewJobServer(addr string, manager *JobManager) JobServer {
-	s := JobServer{manager: manager}
-
-	mux := http.NewServeMux()
-	mux.HandleFunc(nextTaskSetPath, s.handleNextTaskSet)
-	s.Server = &http.Server{
-		Handler: mux,
-		Addr:    addr,
-	}
-	return s
-}
-
-// handleNextTaskSet handles the next task set request.
-func (s JobServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
-	var req nextTaskSetRequest
-	rawBody, _ := ioutil.ReadAll(r.Body)
-	if err := json.Unmarshal(rawBody, &req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	job, taskSet, err := s.manager.NextTaskSet(req.WorkerID)
-	if err != nil {
-		if err == errNoTaskSet {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			log.Printf("failed to get the next task set: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		return
-	}
-
-	resp := &nextTaskSetResponse{
-		JobID:           job.ID,
-		TaskSetID:       taskSet.ID,
-		DirPath:         job.DirPath,
-		TestBinaryPath:  job.TestBinaryPath,
-		RepoArchivePath: job.RepoArchivePath,
-	}
-	for _, t := range taskSet.Tasks {
-		resp.TestFunctions = append(resp.TestFunctions, t.TestFunction)
-	}
-
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(&resp); err != nil {
-		log.Printf("failed to encode the response: %v\n", err)
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
-// handleReportResult handles the report result request.
-func (s JobServer) handleReportResult(w http.ResponseWriter, r *http.Request) {
-	var req reportResultRequest
-	rawBody, _ := ioutil.ReadAll(r.Body)
-	if err := json.Unmarshal(rawBody, &req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err := s.manager.ReportResult(req.JobID, req.TaskSetID, req.Successful); err != nil {
-		log.Printf("failed to report the result: %v\n", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
 }

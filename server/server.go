@@ -29,10 +29,13 @@ type HornetServer struct {
 func NewHornetServer(addr, dir string, manager *JobManager) HornetServer {
 	setSharedDir(dir)
 
+	// TODO: load the depthLimit value from the setting file
 	s := HornetServer{manager: manager}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(common.TestPath, s.handleTest)
+	mux.HandleFunc(common.NextTaskSetPath, s.handleNextTaskSet)
+	mux.HandleFunc(common.ReportResultPath, s.handleReportResult)
 	s.Server = &http.Server{
 		Handler: mux,
 		Addr:    addr,
@@ -146,4 +149,58 @@ func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {
 		fmt.Fprintf(w, "%s\n", string(content))
 	}
 	fmt.Fprintf(w, "Total time: %v\n", taskSet.FinishedAt.Sub(taskSet.StartedAt))
+}
+
+// handleNextTaskSet handles the next task set request.
+func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
+	var req common.NextTaskSetRequest
+	rawBody, _ := ioutil.ReadAll(r.Body)
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	job, taskSet, err := s.manager.NextTaskSet(req.WorkerID)
+	if err != nil {
+		if err == errNoTaskSet {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			log.Printf("failed to get the next task set: %v\n", err)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
+
+	resp := &common.NextTaskSetResponse{
+		JobID:           job.ID,
+		TaskSetID:       taskSet.ID,
+		DirPath:         job.DirPath,
+		TestBinaryPath:  job.TestBinaryPath,
+		RepoArchivePath: job.RepoArchivePath,
+	}
+	for _, t := range taskSet.Tasks {
+		resp.TestFunctions = append(resp.TestFunctions, t.TestFunction)
+	}
+
+	enc := json.NewEncoder(w)
+	if err := enc.Encode(&resp); err != nil {
+		log.Printf("failed to encode the response: %v\n", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+// handleReportResult handles the report result request.
+func (s HornetServer) handleReportResult(w http.ResponseWriter, r *http.Request) {
+	var req common.ReportResultRequest
+	rawBody, _ := ioutil.ReadAll(r.Body)
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if err := s.manager.ReportResult(req.JobID, req.TaskSetID, req.Successful); err != nil {
+		log.Printf("failed to report the result: %v\n", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
