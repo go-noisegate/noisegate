@@ -19,7 +19,7 @@ type WorkerManager struct {
 // the default docker daemon is used.
 func (m *WorkerManager) AddWorker(host, image string) error {
 	workerID := len(m.Workers)
-	workerName := fmt.Sprintf("bee-%s-%03d", workerGroupName, workerID)
+	workerName := fmt.Sprintf("hornet-worker-%s-%03d", workerGroupName, workerID)
 
 	// TODO: workerバイナリを差し込むために、create -> cp -> startの順にする
 	var args []string

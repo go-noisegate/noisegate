@@ -29,7 +29,8 @@ const (
 
 // NextTaskSetRequest represents the input data to the next task set API.
 type NextTaskSetRequest struct {
-	WorkerID int64 `json:"worker_id"`
+	WorkerGroupName string `json:"worker_group_name"`
+	WorkerID        int    `json:"worker_id"`
 }
 
 // NextTaskSetResponse represents the output data from the next task set API.

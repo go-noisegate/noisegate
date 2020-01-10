@@ -154,8 +154,8 @@ func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {
 // handleNextTaskSet handles the next task set request.
 func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
 	var req common.NextTaskSetRequest
-	rawBody, _ := ioutil.ReadAll(r.Body)
-	if err := json.Unmarshal(rawBody, &req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -192,8 +192,8 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 // handleReportResult handles the report result request.
 func (s HornetServer) handleReportResult(w http.ResponseWriter, r *http.Request) {
 	var req common.ReportResultRequest
-	rawBody, _ := ioutil.ReadAll(r.Body)
-	if err := json.Unmarshal(rawBody, &req); err != nil {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

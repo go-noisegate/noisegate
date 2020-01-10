@@ -19,6 +19,7 @@ func main() {
 		Name:      filepath.Base(os.Args[0]),
 		ArgsUsage: "[server address]",
 		Action: func(c *cli.Context) error {
+			// TODO: make sure it's accessible from docker containers.
 			addr := "localhost:48059" // bees
 			if c.NArg() > 0 {
 				addr = c.Args().First()
