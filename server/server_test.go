@@ -94,7 +94,7 @@ func executeTaskSet(t *testing.T, manager *JobManager) {
 	var taskSet *TaskSet
 	for {
 		var err error
-		job, taskSet, err = manager.NextTaskSet(0)
+		job, taskSet, err = manager.NextTaskSet(workerGroupName, 0)
 		if err == nil {
 			break
 		}

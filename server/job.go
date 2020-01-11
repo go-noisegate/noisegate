@@ -271,10 +271,11 @@ type TaskSet struct {
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
 	// The path from the shared dir
-	LogPath    string
-	Tasks      []*Task
-	WorkerID   int64
-	finishedCh chan struct{}
+	LogPath         string
+	Tasks           []*Task
+	WorkerGroupName string
+	WorkerID        int
+	finishedCh      chan struct{}
 }
 
 // TaskSetStatus represents the status of the task set.
@@ -297,8 +298,9 @@ func NewTaskSet(id int, job *Job) *TaskSet {
 	}
 }
 
-func (s *TaskSet) Start(workerID int64) {
+func (s *TaskSet) Start(groupName string, workerID int) {
 	s.StartedAt = time.Now()
+	s.WorkerGroupName = groupName
 	s.WorkerID = workerID
 	s.Status = TaskSetStatusStarted
 }

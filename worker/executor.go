@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/ks888/hornet/common"
@@ -48,8 +49,12 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nextTaskSet{}, err
+	} else if resp.StatusCode == http.StatusNotFound {
+		return nextTaskSet{}, errNoTaskSet
+	} else if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return nextTaskSet{}, fmt.Errorf("failed to get next task set: %s", string(body))
 	}
-	// TODO: check status code and handle 404 case and other error case.
 
 	respData := common.NextTaskSetResponse{}
 	dec := json.NewDecoder(resp.Body)
@@ -57,6 +62,5 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 		return nextTaskSet{}, err
 	}
 
-	fmt.Printf("next task: %#v\n", respData)
 	return nextTaskSet(respData), nil
 }

@@ -160,7 +160,7 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	job, taskSet, err := s.manager.NextTaskSet(req.WorkerID)
+	job, taskSet, err := s.manager.NextTaskSet(req.WorkerGroupName, req.WorkerID)
 	if err != nil {
 		if err == errNoTaskSet {
 			w.WriteHeader(http.StatusNotFound)
