@@ -95,6 +95,24 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 	return nil
 }
 
-func (e Executor) reportResult(ctx context.Context, taskSet nextTaskSet) error {
+func (e Executor) reportResult(ctx context.Context, taskSet nextTaskSet, successful bool) error {
+	reqData := common.ReportResultRequest{JobID: taskSet.JobID, TaskSetID: taskSet.TaskSetID, Successful: successful}
+	reqBody, err := json.Marshal(&reqData)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("http://%s%s", e.Addr, common.ReportResultPath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return err
+	}
+
+	if resp, err := http.DefaultClient.Do(req); err != nil {
+		return err
+	} else if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return fmt.Errorf("failed to report result: %s", string(body))
+	}
 	return nil
 }

@@ -150,3 +150,30 @@ func TestExecute_ExitCodeNot0_LogPathNotFound(t *testing.T) {
 		t.Fatalf("nil error")
 	}
 }
+
+func TestReportResult(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc(common.ReportResultPath, func(w http.ResponseWriter, r *http.Request) {
+	})
+	server := httptest.NewServer(mux)
+
+	taskSet := nextTaskSet{JobID: 1, TaskSetID: 1}
+	w := Executor{Addr: strings.TrimPrefix(server.URL, "http://")}
+	if err := w.reportResult(context.Background(), taskSet, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestReportResult_ServerError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc(common.ReportResultPath, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	server := httptest.NewServer(mux)
+
+	taskSet := nextTaskSet{JobID: 1, TaskSetID: 1}
+	w := Executor{Addr: strings.TrimPrefix(server.URL, "http://")}
+	if err := w.reportResult(context.Background(), taskSet, true); err == nil {
+		t.Fatalf("nil error: %v", err)
+	}
+}
