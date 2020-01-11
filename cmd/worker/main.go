@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -27,7 +28,11 @@ func main() {
 			if err != nil {
 				return err
 			}
-			w := worker.Executor{GroupName: groupName, ID: workerID, Addr: addr}
+			const workspace = "/opt/hornet/workspace/"
+			if err := os.MkdirAll(workspace, os.ModePerm); err != nil {
+				return fmt.Errorf("failed to create the workspace %s: %v", workspace, err)
+			}
+			w := worker.Executor{GroupName: groupName, ID: workerID, Addr: addr, Workspace: workspace}
 			return w.Run(c.Context)
 		},
 		Flags: []cli.Flag{

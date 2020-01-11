@@ -171,6 +171,7 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// TODO: change the path to the valid abs path in the worker container.
 	resp := &common.NextTaskSetResponse{
 		JobID:           job.ID,
 		TaskSetID:       taskSet.ID,

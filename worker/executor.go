@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os/exec"
 
 	"github.com/ks888/hornet/common"
 )
@@ -17,6 +18,7 @@ type Executor struct {
 	GroupName string
 	ID        int
 	Addr      string
+	Workspace string
 }
 
 // Run starts the main loop.
@@ -63,4 +65,14 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 	}
 
 	return nextTaskSet(respData), nil
+}
+
+func (e Executor) extractRepoArchive(ctx context.Context, repoArchivePath string) error {
+	cmd := exec.Command("tar", "-xf", repoArchivePath)
+	cmd.Dir = e.Workspace
+	archiveLog, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to archive: %w\nlog:\n%s", err, string(archiveLog))
+	}
+	return nil
 }

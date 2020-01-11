@@ -3,8 +3,12 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -69,5 +73,24 @@ func Test_NextTaskSet_ServerError(t *testing.T) {
 	_, err := w.nextTaskSet(context.Background())
 	if err == nil {
 		t.Fatalf("unexpected nil")
+	}
+}
+
+func Test_ExtractRepoArchive(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "hornet-test")
+	if err != nil {
+		t.Errorf("failed to create the temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	_, filename, _, _ := runtime.Caller(0)
+	thisDir := filepath.Dir(filename)
+
+	w := Executor{Workspace: tempDir}
+	if err := w.extractRepoArchive(context.Background(), filepath.Join(thisDir, "testdata", "repo.tar")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "README.md")); os.IsNotExist(err) {
+		t.Errorf("failed to extract some file(s)")
 	}
 }
