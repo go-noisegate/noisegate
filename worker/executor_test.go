@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +16,90 @@ import (
 
 	"github.com/ks888/hornet/common"
 )
+
+func TestRun(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "hornet-test")
+	if err != nil {
+		t.Errorf("failed to create the temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	_, filename, _, _ := runtime.Caller(0)
+	thisDir := filepath.Dir(filename)
+
+	testCases := []struct {
+		input  nextTaskSet
+		expect bool
+	}{
+		{
+			input: nextTaskSet{
+				JobID:           1,
+				TaskSetID:       1,
+				LogPath:         filepath.Join(tempDir, "testlog"),
+				RepoArchivePath: filepath.Join(thisDir, "testdata", "repo.tar"),
+				TestBinaryPath:  "echo",
+			},
+			expect: true,
+		},
+		{
+			input: nextTaskSet{
+				JobID:           1,
+				TaskSetID:       1,
+				LogPath:         filepath.Join(tempDir, "testlog"),
+				RepoArchivePath: "/path/to/not/exist/file",
+				TestBinaryPath:  "echo",
+			},
+			expect: false,
+		},
+		{
+			input: nextTaskSet{
+				JobID:           1,
+				TaskSetID:       1,
+				LogPath:         filepath.Join(tempDir, "testlog"),
+				RepoArchivePath: filepath.Join(thisDir, "testdata", "repo.tar"),
+				TestBinaryPath:  "cmd-not-exist",
+			},
+			expect: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		done := make(chan struct{})
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			<-done
+			cancel()
+		}()
+
+		mux := http.NewServeMux()
+		first := true
+		mux.HandleFunc(common.NextTaskSetPath, func(w http.ResponseWriter, r *http.Request) {
+			if !first {
+				w.WriteHeader(http.StatusNotFound)
+				done <- struct{}{}
+				return
+			}
+
+			resp := common.NextTaskSetResponse(testCase.input)
+			out, _ := json.Marshal(&resp)
+			w.Write(out)
+			first = false
+		})
+		var rawReport []byte
+		mux.HandleFunc(common.ReportResultPath, func(w http.ResponseWriter, r *http.Request) {
+			rawReport, _ = ioutil.ReadAll(r.Body)
+		})
+		server := httptest.NewServer(mux)
+
+		e := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://"), Workspace: tempDir}
+		if err := e.Run(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("not canceled error: %v", err)
+		}
+		if !strings.Contains(string(rawReport), fmt.Sprintf(`"successful":%v`, testCase.expect)) {
+			t.Errorf("invalid report: %s", string(rawReport))
+		}
+	}
+}
 
 func TestNextTaskSet(t *testing.T) {
 	mux := http.NewServeMux()
@@ -31,8 +117,8 @@ func TestNextTaskSet(t *testing.T) {
 	})
 	server := httptest.NewServer(mux)
 
-	w := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://")}
-	nextTaskSet, err := w.nextTaskSet(context.Background())
+	e := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://")}
+	nextTaskSet, err := e.nextTaskSet(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -54,8 +140,8 @@ func TestNextTaskSet_NotFound(t *testing.T) {
 	})
 	server := httptest.NewServer(mux)
 
-	w := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://")}
-	_, err := w.nextTaskSet(context.Background())
+	e := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://")}
+	_, err := e.nextTaskSet(context.Background())
 	if err != errNoTaskSet {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,8 +155,8 @@ func TestNextTaskSet_ServerError(t *testing.T) {
 	})
 	server := httptest.NewServer(mux)
 
-	w := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://")}
-	_, err := w.nextTaskSet(context.Background())
+	e := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://")}
+	_, err := e.nextTaskSet(context.Background())
 	if err == nil {
 		t.Fatalf("unexpected nil")
 	}
@@ -87,14 +173,15 @@ func TestCreateWorkspace(t *testing.T) {
 	thisDir := filepath.Dir(filename)
 
 	taskSet := nextTaskSet{
+		JobID:           1,
 		LogPath:         filepath.Join(tempDir, "testlog"),
 		RepoArchivePath: filepath.Join(thisDir, "testdata", "repo.tar"),
 	}
-	w := Executor{Workspace: tempDir}
-	if err := w.createWorkspace(context.Background(), taskSet); err != nil {
+	e := Executor{Workspace: tempDir}
+	if err := e.createWorkspace(context.Background(), taskSet); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(tempDir, "README.md")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(e.workspacePath(taskSet), "README.md")); os.IsNotExist(err) {
 		t.Errorf("failed to create ws")
 	}
 }
@@ -111,8 +198,8 @@ func TestCreateWorkspace_InvalidPath(t *testing.T) {
 		LogPath:         logPath,
 		RepoArchivePath: "/path/to/not/exist/file",
 	}
-	w := Executor{Workspace: tempDir}
-	if err := w.createWorkspace(context.Background(), taskSet); err == nil {
+	e := Executor{Workspace: tempDir}
+	if err := e.createWorkspace(context.Background(), taskSet); err == nil {
 		t.Fatalf("nil error: %v", err)
 	}
 	out, err := ioutil.ReadFile(logPath)
@@ -124,6 +211,19 @@ func TestCreateWorkspace_InvalidPath(t *testing.T) {
 	}
 }
 
+func TestCreateWorkspace_LogPathNotFound(t *testing.T) {
+	_, filename, _, _ := runtime.Caller(0)
+	thisDir := filepath.Dir(filename)
+
+	taskSet := nextTaskSet{
+		LogPath:        "/path/to/not/exist/file",
+		TestBinaryPath: "echo",
+	}
+	e := Executor{Workspace: thisDir}
+	if err := e.createWorkspace(context.Background(), taskSet); err == nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 func TestCreateWorkspace_LogFileHasExistingData(t *testing.T) {
 	tempDir, err := ioutil.TempDir("", "hornet-test")
 	if err != nil {
@@ -140,8 +240,8 @@ func TestCreateWorkspace_LogFileHasExistingData(t *testing.T) {
 		LogPath:         logPath,
 		RepoArchivePath: "/path/to/not/exist/file",
 	}
-	w := Executor{Workspace: tempDir}
-	if err := w.createWorkspace(context.Background(), taskSet); err == nil {
+	e := Executor{Workspace: tempDir}
+	if err := e.createWorkspace(context.Background(), taskSet); err == nil {
 		t.Fatalf("nil error: %v", err)
 	}
 	out, err := ioutil.ReadFile(logPath)
@@ -168,8 +268,11 @@ func TestExecute(t *testing.T) {
 		LogPath:        tempFile.Name(),
 		TestBinaryPath: "echo",
 	}
-	w := Executor{Workspace: thisDir}
-	if err := w.execute(context.Background(), taskSet); err != nil {
+	e := Executor{Workspace: thisDir}
+	if err := e.createWorkspace(context.Background(), taskSet); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := e.execute(context.Background(), taskSet); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	args, _ := ioutil.ReadFile(tempFile.Name())
@@ -189,22 +292,11 @@ func TestExecute_ExitCodeNot0(t *testing.T) {
 		LogPath:        tempFile.Name(),
 		TestBinaryPath: "cmd-not-exist",
 	}
-	w := Executor{}
-	if err := w.execute(context.Background(), taskSet); err == nil {
-		t.Fatalf("nil error")
+	e := Executor{}
+	if err := e.createWorkspace(context.Background(), taskSet); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-}
-
-func TestExecute_ExitCodeNot0_LogPathNotFound(t *testing.T) {
-	_, filename, _, _ := runtime.Caller(0)
-	thisDir := filepath.Dir(filename)
-
-	taskSet := nextTaskSet{
-		LogPath:        "/path/to/not/exist/file",
-		TestBinaryPath: "echo",
-	}
-	w := Executor{Workspace: thisDir}
-	if err := w.execute(context.Background(), taskSet); err == nil {
+	if err := e.execute(context.Background(), taskSet); err == nil {
 		t.Fatalf("nil error")
 	}
 }
@@ -216,8 +308,8 @@ func TestReportResult(t *testing.T) {
 	server := httptest.NewServer(mux)
 
 	taskSet := nextTaskSet{JobID: 1, TaskSetID: 1}
-	w := Executor{Addr: strings.TrimPrefix(server.URL, "http://")}
-	if err := w.reportResult(context.Background(), taskSet, true); err != nil {
+	e := Executor{Addr: strings.TrimPrefix(server.URL, "http://")}
+	if err := e.reportResult(context.Background(), taskSet, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -230,10 +322,8 @@ func TestReportResult_ServerError(t *testing.T) {
 	server := httptest.NewServer(mux)
 
 	taskSet := nextTaskSet{JobID: 1, TaskSetID: 1}
-	w := Executor{Addr: strings.TrimPrefix(server.URL, "http://")}
-	if err := w.reportResult(context.Background(), taskSet, true); err == nil {
+	e := Executor{Addr: strings.TrimPrefix(server.URL, "http://")}
+	if err := e.reportResult(context.Background(), taskSet, true); err == nil {
 		t.Fatalf("nil error: %v", err)
 	}
 }
-
-// TODO: write Run test

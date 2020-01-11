@@ -7,15 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ks888/hornet/common"
+	"github.com/ks888/hornet/common/log"
 )
 
 // Executor fetches the task set, execute it and report its result. Repeat.
@@ -32,7 +33,9 @@ var waitTime = time.Second
 func (e Executor) Run(ctx context.Context) error {
 	for {
 		nextTaskSet, err := e.nextTaskSet(ctx)
-		if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return err
+		} else if err != nil {
 			if err != errNoTaskSet {
 				log.Printf("failed to get the next task set: %w", err)
 			}
@@ -45,7 +48,7 @@ func (e Executor) Run(ctx context.Context) error {
 			err := e.execute(ctx, nextTaskSet)
 			successful = err == nil
 
-			if err := e.removeWorkspace(ctx.nextTaskSet); err != nil {
+			if err := e.removeWorkspace(ctx, nextTaskSet); err != nil {
 				log.Debugf("failed to remove the workspace: %v", err)
 			}
 		}
@@ -93,8 +96,11 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 }
 
 func (e Executor) createWorkspace(ctx context.Context, taskSet nextTaskSet) error {
-	cmd := exec.CommandContext(ctx, "tar", "-xf", taskSet.RepoArchivePath)
+	if err := os.MkdirAll(e.workspacePath(taskSet), os.ModePerm); err != nil {
+		return err
+	}
 
+	cmd := exec.CommandContext(ctx, "tar", "-xf", taskSet.RepoArchivePath)
 	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to open the log file %s: %w\n", taskSet.LogPath, err)
@@ -110,7 +116,7 @@ func (e Executor) createWorkspace(ctx context.Context, taskSet nextTaskSet) erro
 }
 
 func (e Executor) workspacePath(taskSet nextTaskSet) string {
-	return filepath.Join(e.Workspace, taskSet.JobID)
+	return filepath.Join(e.Workspace, strconv.FormatInt(taskSet.JobID, 10))
 }
 
 func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
