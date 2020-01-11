@@ -139,8 +139,8 @@ func TestHandleNextTaskSet(t *testing.T) {
 	if len(decodedResp.TestFunctions) != 1 || decodedResp.TestFunctions[0] != "TestFunc1" {
 		t.Errorf("unexpected test functions: %v", decodedResp.TestFunctions)
 	}
-	if decodedResp.DirPath != "/path/to/dir/" {
-		t.Errorf("unexpected dir path: %s", decodedResp.DirPath)
+	if decodedResp.LogPath == "" {
+		t.Errorf("empty log path")
 	}
 	if decodedResp.TestBinaryPath != "/path/to/binary" {
 		t.Errorf("unexpected test binary path: %s", decodedResp.TestBinaryPath)

@@ -175,7 +175,7 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 	resp := &common.NextTaskSetResponse{
 		JobID:           job.ID,
 		TaskSetID:       taskSet.ID,
-		DirPath:         job.DirPath,
+		LogPath:         taskSet.LogPath,
 		TestBinaryPath:  job.TestBinaryPath,
 		RepoArchivePath: job.RepoArchivePath,
 	}

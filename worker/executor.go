@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/ks888/hornet/common"
 )
@@ -68,11 +70,31 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 }
 
 func (e Executor) extractRepoArchive(ctx context.Context, repoArchivePath string) error {
-	cmd := exec.Command("tar", "-xf", repoArchivePath)
+	cmd := exec.CommandContext(ctx, "tar", "-xf", repoArchivePath)
 	cmd.Dir = e.Workspace
 	archiveLog, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to archive: %w\nlog:\n%s", err, string(archiveLog))
 	}
+	return nil
+}
+
+func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
+	cmd := exec.CommandContext(ctx, taskSet.TestBinaryPath, "-test.v", "-test.run", strings.Join(taskSet.TestFunctions, "|"))
+	cmd.Dir = e.Workspace
+
+	logFile, err := os.Create(taskSet.LogPath)
+	if err != nil {
+		return fmt.Errorf("failed to open the log file %s: %w\n", taskSet.LogPath, err)
+	}
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to execute the task set: %w", err)
+	}
+	return nil
+}
+
+func (e Executor) reportResult(ctx context.Context, taskSet nextTaskSet) error {
 	return nil
 }

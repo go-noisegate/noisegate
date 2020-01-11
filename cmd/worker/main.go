@@ -28,7 +28,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			const workspace = "/opt/hornet/workspace/"
+			const workspace = "/opt/hornet/workspace"
 			if err := os.MkdirAll(workspace, os.ModePerm); err != nil {
 				return fmt.Errorf("failed to create the workspace %s: %v", workspace, err)
 			}

@@ -38,8 +38,8 @@ type NextTaskSetResponse struct {
 	JobID         int64    `json:"job_id"`
 	TaskSetID     int      `json:"task_set_id"`
 	TestFunctions []string `json:"test_functions"`
-	// The abs path in the manager fs.
-	DirPath string `json:"dir_path"`
+	// The path from the shared dir
+	LogPath string `json:"log_path"`
 	// The path from the shared dir
 	TestBinaryPath string `json:"test_binary_path"`
 	// The path from the shared dir
