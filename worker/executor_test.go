@@ -86,12 +86,70 @@ func TestExtractRepoArchive(t *testing.T) {
 	_, filename, _, _ := runtime.Caller(0)
 	thisDir := filepath.Dir(filename)
 
+	taskSet := nextTaskSet{
+		LogPath:         filepath.Join(tempDir, "testlog"),
+		RepoArchivePath: filepath.Join(thisDir, "testdata", "repo.tar"),
+	}
 	w := Executor{Workspace: tempDir}
-	if err := w.extractRepoArchive(context.Background(), filepath.Join(thisDir, "testdata", "repo.tar")); err != nil {
+	if err := w.extractRepoArchive(context.Background(), taskSet); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(tempDir, "README.md")); os.IsNotExist(err) {
 		t.Errorf("failed to extract some file(s)")
+	}
+}
+
+func TestExtractRepoArchive_InvalidPath(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "hornet-test")
+	if err != nil {
+		t.Errorf("failed to create the temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	logPath := filepath.Join(tempDir, "testlog")
+	taskSet := nextTaskSet{
+		LogPath:         logPath,
+		RepoArchivePath: "/path/to/not/exist/file",
+	}
+	w := Executor{Workspace: tempDir}
+	if err := w.extractRepoArchive(context.Background(), taskSet); err == nil {
+		t.Fatalf("nil error: %v", err)
+	}
+	out, err := ioutil.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(out) == "" {
+		t.Errorf("empty log")
+	}
+}
+
+func TestExtractRepoArchive_LogFileHasExistingData(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "hornet-test")
+	if err != nil {
+		t.Fatalf("failed to create the temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	logPath := filepath.Join(tempDir, "testlog")
+	if err := ioutil.WriteFile(logPath, []byte("initial data"), os.ModePerm); err != nil {
+		t.Fatalf("failed to write the data to temp file %s: %v", logPath, err)
+	}
+
+	taskSet := nextTaskSet{
+		LogPath:         logPath,
+		RepoArchivePath: "/path/to/not/exist/file",
+	}
+	w := Executor{Workspace: tempDir}
+	if err := w.extractRepoArchive(context.Background(), taskSet); err == nil {
+		t.Fatalf("nil error: %v", err)
+	}
+	out, err := ioutil.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(string(out), "initial data") {
+		t.Errorf("existing data is removed")
 	}
 }
 
@@ -177,3 +235,5 @@ func TestReportResult_ServerError(t *testing.T) {
 		t.Fatalf("nil error: %v", err)
 	}
 }
+
+// TODO: write Run test

@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/ks888/hornet/common"
 )
@@ -23,13 +25,29 @@ type Executor struct {
 	Workspace string
 }
 
+var waitTime = time.Second
+
 // Run starts the main loop.
 func (e Executor) Run(ctx context.Context) error {
 	for {
-		// get next task set
-		// copy
-		// execute
-		// report
+		nextTaskSet, err := e.nextTaskSet(ctx)
+		if err != nil {
+			if err != errNoTaskSet {
+				log.Printf("failed to get the next task set: %w", err)
+			}
+			time.Sleep(waitTime)
+			continue
+		}
+
+		successful := false
+		if err := e.extractRepoArchive(ctx, nextTaskSet); err == nil {
+			err := e.execute(ctx, nextTaskSet)
+			successful = err == nil
+		}
+
+		if err := e.reportResult(ctx, nextTaskSet, successful); err != nil {
+			log.Printf("failed to report the result: %w", err)
+		}
 	}
 }
 
@@ -69,12 +87,21 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 	return nextTaskSet(respData), nil
 }
 
-func (e Executor) extractRepoArchive(ctx context.Context, repoArchivePath string) error {
-	cmd := exec.CommandContext(ctx, "tar", "-xf", repoArchivePath)
-	cmd.Dir = e.Workspace
-	archiveLog, err := cmd.CombinedOutput()
+func (e Executor) extractRepoArchive(ctx context.Context, taskSet nextTaskSet) error {
+	cmd := exec.CommandContext(ctx, "tar", "-xf", taskSet.RepoArchivePath)
+
+	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("failed to archive: %w\nlog:\n%s", err, string(archiveLog))
+		return fmt.Errorf("failed to open the log file %s: %w\n", taskSet.LogPath, err)
+	}
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+
+	// TODO: should include job id
+	// TODO: skip if already exist (same job id case)
+	cmd.Dir = e.Workspace
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to archive: %w", err)
 	}
 	return nil
 }
@@ -83,7 +110,7 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 	cmd := exec.CommandContext(ctx, taskSet.TestBinaryPath, "-test.v", "-test.run", strings.Join(taskSet.TestFunctions, "|"))
 	cmd.Dir = e.Workspace
 
-	logFile, err := os.Create(taskSet.LogPath)
+	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to open the log file %s: %w\n", taskSet.LogPath, err)
 	}
