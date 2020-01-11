@@ -76,7 +76,7 @@ func TestNextTaskSet_ServerError(t *testing.T) {
 	}
 }
 
-func TestExtractRepoArchive(t *testing.T) {
+func TestCreateWorkspace(t *testing.T) {
 	tempDir, err := ioutil.TempDir("", "hornet-test")
 	if err != nil {
 		t.Errorf("failed to create the temp directory: %v", err)
@@ -91,15 +91,15 @@ func TestExtractRepoArchive(t *testing.T) {
 		RepoArchivePath: filepath.Join(thisDir, "testdata", "repo.tar"),
 	}
 	w := Executor{Workspace: tempDir}
-	if err := w.extractRepoArchive(context.Background(), taskSet); err != nil {
+	if err := w.createWorkspace(context.Background(), taskSet); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(tempDir, "README.md")); os.IsNotExist(err) {
-		t.Errorf("failed to extract some file(s)")
+		t.Errorf("failed to create ws")
 	}
 }
 
-func TestExtractRepoArchive_InvalidPath(t *testing.T) {
+func TestCreateWorkspace_InvalidPath(t *testing.T) {
 	tempDir, err := ioutil.TempDir("", "hornet-test")
 	if err != nil {
 		t.Errorf("failed to create the temp directory: %v", err)
@@ -112,7 +112,7 @@ func TestExtractRepoArchive_InvalidPath(t *testing.T) {
 		RepoArchivePath: "/path/to/not/exist/file",
 	}
 	w := Executor{Workspace: tempDir}
-	if err := w.extractRepoArchive(context.Background(), taskSet); err == nil {
+	if err := w.createWorkspace(context.Background(), taskSet); err == nil {
 		t.Fatalf("nil error: %v", err)
 	}
 	out, err := ioutil.ReadFile(logPath)
@@ -124,7 +124,7 @@ func TestExtractRepoArchive_InvalidPath(t *testing.T) {
 	}
 }
 
-func TestExtractRepoArchive_LogFileHasExistingData(t *testing.T) {
+func TestCreateWorkspace_LogFileHasExistingData(t *testing.T) {
 	tempDir, err := ioutil.TempDir("", "hornet-test")
 	if err != nil {
 		t.Fatalf("failed to create the temp directory: %v", err)
@@ -141,7 +141,7 @@ func TestExtractRepoArchive_LogFileHasExistingData(t *testing.T) {
 		RepoArchivePath: "/path/to/not/exist/file",
 	}
 	w := Executor{Workspace: tempDir}
-	if err := w.extractRepoArchive(context.Background(), taskSet); err == nil {
+	if err := w.createWorkspace(context.Background(), taskSet); err == nil {
 		t.Fatalf("nil error: %v", err)
 	}
 	out, err := ioutil.ReadFile(logPath)

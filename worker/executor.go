@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,9 +41,13 @@ func (e Executor) Run(ctx context.Context) error {
 		}
 
 		successful := false
-		if err := e.extractRepoArchive(ctx, nextTaskSet); err == nil {
+		if err := e.createWorkspace(ctx, nextTaskSet); err == nil {
 			err := e.execute(ctx, nextTaskSet)
 			successful = err == nil
+
+			if err := e.removeWorkspace(ctx.nextTaskSet); err != nil {
+				log.Debugf("failed to remove the workspace: %v", err)
+			}
 		}
 
 		if err := e.reportResult(ctx, nextTaskSet, successful); err != nil {
@@ -87,7 +92,7 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 	return nextTaskSet(respData), nil
 }
 
-func (e Executor) extractRepoArchive(ctx context.Context, taskSet nextTaskSet) error {
+func (e Executor) createWorkspace(ctx context.Context, taskSet nextTaskSet) error {
 	cmd := exec.CommandContext(ctx, "tar", "-xf", taskSet.RepoArchivePath)
 
 	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
@@ -97,18 +102,20 @@ func (e Executor) extractRepoArchive(ctx context.Context, taskSet nextTaskSet) e
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
-	// TODO: should include job id
-	// TODO: skip if already exist (same job id case)
-	cmd.Dir = e.Workspace
+	cmd.Dir = e.workspacePath(taskSet)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to archive: %w", err)
 	}
 	return nil
 }
 
+func (e Executor) workspacePath(taskSet nextTaskSet) string {
+	return filepath.Join(e.Workspace, taskSet.JobID)
+}
+
 func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 	cmd := exec.CommandContext(ctx, taskSet.TestBinaryPath, "-test.v", "-test.run", strings.Join(taskSet.TestFunctions, "|"))
-	cmd.Dir = e.Workspace
+	cmd.Dir = e.workspacePath(taskSet)
 
 	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
@@ -120,6 +127,10 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 		return fmt.Errorf("failed to execute the task set: %w", err)
 	}
 	return nil
+}
+
+func (e Executor) removeWorkspace(ctx context.Context, taskSet nextTaskSet) error {
+	return os.RemoveAll(e.workspacePath(taskSet))
 }
 
 func (e Executor) reportResult(ctx context.Context, taskSet nextTaskSet, successful bool) error {
