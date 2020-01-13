@@ -17,7 +17,7 @@ import (
 func main() {
 	app := &cli.App{
 		Name:      filepath.Base(os.Args[0]),
-		ArgsUsage: "[server address]",
+		ArgsUsage: "[server address (default: \"localhost:48059\")]",
 		Action: func(c *cli.Context) error {
 			// TODO: make sure it's accessible from docker containers.
 			addr := "localhost:48059" // bees
@@ -27,7 +27,13 @@ func main() {
 
 			log.EnableDebugLog(c.Bool("debug"))
 
-			return runServer(addr, c.String("address-from-container"))
+			opt := workerOptions{
+				addrFromContainer: c.String("address-from-container"),
+				numWorkers:        c.Int("num-workers"),
+				workerPath:        c.String("worker-path"),
+				image:             c.String("image"),
+			}
+			return runServer(addr, opt)
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
@@ -40,6 +46,21 @@ func main() {
 				Usage: "address to access hornetd server from container",
 				Value: "host.docker.internal:48059",
 			},
+			&cli.IntFlag{
+				Name:  "num-workers",
+				Usage: "the number of workers",
+				Value: 4,
+			},
+			&cli.StringFlag{
+				Name:  "worker-path",
+				Usage: "path to the `hornet-worker` binary. If empty, search the PATH directories",
+				Value: "",
+			},
+			&cli.StringFlag{
+				Name:  "image",
+				Usage: "the docker image the workers use",
+				Value: "alpine:3.11",
+			},
 		},
 		HideHelp: true, // to hide the `COMMANDS` section in the help message.
 	}
@@ -50,27 +71,42 @@ func main() {
 	}
 }
 
-func runServer(addr, addrFromContainer string) error {
+type workerOptions struct {
+	addrFromContainer string
+	numWorkers        int
+	workerPath        string
+	image             string
+}
+
+func runServer(addr string, opt workerOptions) error {
 	sharedDir, err := ioutil.TempDir("", "hornet")
 	if err != nil {
 		return fmt.Errorf("failed to create the directory to store the test binary: %w", err)
 	}
 	defer os.RemoveAll(sharedDir)
 
-	manager := server.NewJobManager()
-	server := server.NewHornetServer(addr, sharedDir, manager)
+	jobManager := server.NewJobManager()
+	workerManager := &server.WorkerManager{ServerAddress: opt.addrFromContainer, WorkerBinPath: opt.workerPath}
+	fmt.Printf("start %d workers...\n", opt.numWorkers)
+	for i := 0; i < opt.numWorkers; i++ {
+		workerManager.AddWorker("", opt.image)
+	}
+
+	server := server.NewHornetServer(addr, sharedDir, jobManager, workerManager)
 	shutdownDoneCh := make(chan struct{})
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, os.Interrupt)
 		<-sigCh
 
+		fmt.Println("shutting down...")
 		if err := server.Shutdown(context.Background()); err != nil {
 			log.Printf("failed to shutdown the server: %v", err)
 		}
 		close(shutdownDoneCh)
 	}()
 
+	fmt.Printf("start the hornetd server at %s\n", addr)
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("failed to start or close the server: %w", err)
 	}

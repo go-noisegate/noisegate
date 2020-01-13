@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"go/build"
@@ -21,17 +22,18 @@ const sharedDirOnContainer = "/opt/hornet/shared" // container side
 // HornetServer serves the APIs for the cli client.
 type HornetServer struct {
 	*http.Server
-	manager    *JobManager
-	depthLimit int
+	jobManager    *JobManager
+	workerManager *WorkerManager
+	depthLimit    int
 }
 
 // NewHornetServer returns the new hornet server.
 // We can use only one server instance in the process even if the address is different.
-func NewHornetServer(addr, dir string, manager *JobManager) HornetServer {
+func NewHornetServer(addr, dir string, jobManager *JobManager, workerManager *WorkerManager) HornetServer {
 	setSharedDir(dir)
 
 	// TODO: load the depthLimit value from the setting file
-	s := HornetServer{manager: manager}
+	s := HornetServer{jobManager: jobManager, workerManager: workerManager}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(common.TestPath, s.handleTest)
@@ -49,6 +51,13 @@ func setSharedDir(dir string) {
 	os.Mkdir(filepath.Join(sharedDir, "bin"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "lib"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "log"), os.ModePerm)
+}
+
+// Shutdown shutdowns the http server and workers.
+func (s HornetServer) Shutdown(ctx context.Context) error {
+	err := s.Server.Shutdown(ctx)
+	s.workerManager.RemoveWorkers() // not return error
+	return err
 }
 
 func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +100,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s HornetServer) runAndWaitJob(w http.ResponseWriter, job *Job) {
-	s.manager.AddJob(job)
+	s.jobManager.AddJob(job)
 
 	var wg sync.WaitGroup
 	for _, taskSet := range job.TaskSets {
@@ -161,7 +170,7 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	job, taskSet, err := s.manager.NextTaskSet(req.WorkerGroupName, req.WorkerID)
+	job, taskSet, err := s.jobManager.NextTaskSet(req.WorkerGroupName, req.WorkerID)
 	if err != nil {
 		if err == errNoTaskSet {
 			w.WriteHeader(http.StatusNotFound)
@@ -199,7 +208,7 @@ func (s HornetServer) handleReportResult(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := s.manager.ReportResult(req.JobID, req.TaskSetID, req.Successful); err != nil {
+	if err := s.jobManager.ReportResult(req.JobID, req.TaskSetID, req.Successful); err != nil {
 		log.Printf("failed to report the result: %v\n", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return

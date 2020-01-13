@@ -18,15 +18,16 @@ import (
 )
 
 func TestHandleTest_Depth0(t *testing.T) {
-	manager := NewJobManager()
-	server := NewHornetServer("", sharedDir, manager)
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 
 	_, filename, _, _ := runtime.Caller(0)
 	path := filepath.Join(filepath.Dir(filename), "testdata")
 	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	go func() {
-		executeTaskSet(t, manager)
+		executeTaskSet(t, jobManager)
 	}()
 	server.handleTest(w, req)
 
@@ -46,8 +47,9 @@ func TestHandleTest_Depth0(t *testing.T) {
 }
 
 func TestHandleTest_Depth1(t *testing.T) {
-	manager := NewJobManager()
-	server := NewHornetServer("", sharedDir, manager)
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 	server.depthLimit = 1
 
 	_, filename, _, _ := runtime.Caller(0)
@@ -56,8 +58,8 @@ func TestHandleTest_Depth1(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	go func() {
-		executeTaskSet(t, manager)
-		executeTaskSet(t, manager)
+		executeTaskSet(t, jobManager)
+		executeTaskSet(t, jobManager)
 	}()
 	server.handleTest(w, req)
 
@@ -77,8 +79,9 @@ func TestHandleTest_Depth1(t *testing.T) {
 }
 
 func TestHandleTest_EmptyBody(t *testing.T) {
-	manager := NewJobManager()
-	server := NewHornetServer("", sharedDir, manager)
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
@@ -89,12 +92,12 @@ func TestHandleTest_EmptyBody(t *testing.T) {
 	}
 }
 
-func executeTaskSet(t *testing.T, manager *JobManager) {
+func executeTaskSet(t *testing.T, jobManager *JobManager) {
 	var job *Job
 	var taskSet *TaskSet
 	for {
 		var err error
-		job, taskSet, err = manager.NextTaskSet(workerGroupName, 0)
+		job, taskSet, err = jobManager.NextTaskSet(workerGroupName, 0)
 		if err == nil {
 			break
 		}
@@ -106,18 +109,19 @@ func executeTaskSet(t *testing.T, manager *JobManager) {
 		t.Fatalf("failed to write log %s: %v", taskSet.LogPath, err)
 	}
 
-	if err := manager.ReportResult(job.ID, taskSet.ID, true); err != nil {
+	if err := jobManager.ReportResult(job.ID, taskSet.ID, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestHandleNextTaskSet(t *testing.T) {
-	manager := NewJobManager()
+	jobManager := NewJobManager()
 	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary", RepoArchivePath: "/path/to/archive", finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
-	manager.AddJob(job)
+	jobManager.AddJob(job)
 
-	server := NewHornetServer("", sharedDir, manager)
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{"worker_id": 1}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -155,8 +159,9 @@ func TestHandleNextTaskSet(t *testing.T) {
 }
 
 func TestHandleNextTaskSet_NoTaskSet(t *testing.T) {
-	manager := NewJobManager()
-	server := NewHornetServer("", sharedDir, manager)
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -167,15 +172,16 @@ func TestHandleNextTaskSet_NoTaskSet(t *testing.T) {
 }
 
 func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
-	manager := NewJobManager()
+	jobManager := NewJobManager()
 	emptyJob := &Job{ID: 1, finishedCh: make(chan struct{})}
-	manager.AddJob(emptyJob)
+	jobManager.AddJob(emptyJob)
 
 	job := &Job{ID: 2, finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
-	manager.AddJob(job)
+	jobManager.AddJob(job)
 
-	server := NewHornetServer("", sharedDir, manager)
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -193,8 +199,9 @@ func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 }
 
 func TestHandleNextTaskSet_InvalidReqBody(t *testing.T) {
-	manager := NewJobManager()
-	server := NewHornetServer("", sharedDir, manager)
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -206,8 +213,8 @@ func TestHandleNextTaskSet_InvalidReqBody(t *testing.T) {
 func TestHandleReportResult(t *testing.T) {
 	job := &Job{ID: 1, finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestJobManager_ReportResult", Job: job})
-	manager := NewJobManager()
-	manager.AddJob(job)
+	jobManager := NewJobManager()
+	jobManager.AddJob(job)
 
 	logContent := "=== RUN   TestJobManager_ReportResult\n--- PASS: TestJobManager_ReportResult (1.00s)"
 	err := ioutil.WriteFile(filepath.Join(sharedDir, job.TaskSets[0].LogPath), []byte(logContent), 0644)
@@ -215,7 +222,8 @@ func TestHandleReportResult(t *testing.T) {
 		t.Fatalf("failed to write log %s: %v", job.TaskSets[0].LogPath, err)
 	}
 
-	server := NewHornetServer("", sharedDir, manager)
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 	reqBody := common.ReportResultRequest{
 		JobID:      1,
 		TaskSetID:  0,
@@ -236,7 +244,7 @@ func TestHandleReportResult(t *testing.T) {
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("unexpected status: %v", job.Status)
 	}
-	if _, ok := manager.jobs[job.ID]; ok {
+	if _, ok := jobManager.jobs[job.ID]; ok {
 		t.Errorf("the job is not removed")
 	}
 	if job.Tasks[0].Status != TaskStatusSuccessful {
@@ -248,8 +256,9 @@ func TestHandleReportResult(t *testing.T) {
 }
 
 func TestHandleReportResult_JobNotFound(t *testing.T) {
-	manager := NewJobManager()
-	server := NewHornetServer("", sharedDir, manager)
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 	reqBody := common.ReportResultRequest{JobID: 1, TaskSetID: 0, Successful: true}
 	data, _ := json.Marshal(&reqBody)
 	req := httptest.NewRequest(http.MethodGet, common.ReportResultPath, bytes.NewReader(data))
@@ -261,8 +270,9 @@ func TestHandleReportResult_JobNotFound(t *testing.T) {
 }
 
 func TestHandleReportResult_InvalidJSON(t *testing.T) {
-	manager := NewJobManager()
-	server := NewHornetServer("", sharedDir, manager)
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", sharedDir, jobManager, workerManager)
 
 	req := httptest.NewRequest(http.MethodGet, common.ReportResultPath, strings.NewReader("{"))
 	resp := httptest.NewRecorder()

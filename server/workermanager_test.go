@@ -43,20 +43,13 @@ func TestWorkerManager_AddWorker(t *testing.T) {
 
 	cmd := exec.Command("docker", "logs", w.Name)
 	out, _ := cmd.CombinedOutput()
-	if strings.TrimSpace(string(out)) != "--addr host.docker.internal:48059 --debug" {
+	if strings.TrimSpace(string(out)) != "--addr host.docker.internal:48059 --debug test 0" {
 		t.Errorf("invalid output: %s", string(out))
 	}
 }
 
 func TestWorkerManager_AddWorker_NoWorkerBin(t *testing.T) {
-	manager := &WorkerManager{}
-
-	orgPath := os.Getenv("PATH")
-	os.Setenv("PATH", "")
-	defer func() {
-		manager.RemoveWorkers()
-		os.Setenv("PATH", orgPath)
-	}()
+	manager := &WorkerManager{WorkerBinPath: "/file/not/exist"}
 
 	err := manager.AddWorker("", "alpine:3.11")
 	if err == nil {

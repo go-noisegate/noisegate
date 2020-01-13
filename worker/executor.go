@@ -37,7 +37,7 @@ func (e Executor) Run(ctx context.Context) error {
 			return err
 		} else if err != nil {
 			if err != errNoTaskSet {
-				log.Printf("failed to get the next task set: %w", err)
+				log.Printf("failed to get the next task set: %v", err)
 			}
 			time.Sleep(waitTime)
 			continue
@@ -54,7 +54,7 @@ func (e Executor) Run(ctx context.Context) error {
 		}
 
 		if err := e.reportResult(ctx, nextTaskSet, successful); err != nil {
-			log.Printf("failed to report the result: %w", err)
+			log.Printf("failed to report the result: %v", err)
 		}
 	}
 }

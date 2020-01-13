@@ -2,7 +2,9 @@ package server
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/ks888/hornet/common/log"
@@ -16,13 +18,14 @@ const workerBinName = "hornet-worker"
 // WorkerManager manages the workers.
 type WorkerManager struct {
 	ServerAddress string // the hornetd server address usable inside container
+	WorkerBinPath string // if empty, search the PATH directories
 	Workers       []Worker
 }
 
 // AddWorker starts a new worker. `host` specifies daemon socket(s) to connect to. If `host` is empty,
 // the default docker daemon is used.
 func (m *WorkerManager) AddWorker(host, image string) error {
-	workerBinPath, err := exec.LookPath(workerBinName)
+	workerBinPath, err := m.findBinPath()
 	if err != nil {
 		return fmt.Errorf("failed to find the %s command: %w", workerBinName, err)
 	}
@@ -39,6 +42,7 @@ func (m *WorkerManager) AddWorker(host, image string) error {
 	if log.DebugLogEnabled() {
 		createArgs = append(createArgs, "--debug")
 	}
+	createArgs = append(createArgs, workerGroupName, strconv.Itoa(workerID))
 	cmd := exec.Command("docker", createArgs...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -62,6 +66,21 @@ func (m *WorkerManager) AddWorker(host, image string) error {
 
 	m.Workers = append(m.Workers, Worker{workerID, workerName, host, image})
 	return nil
+}
+
+func (m *WorkerManager) findBinPath() (string, error) {
+	if m.WorkerBinPath != "" {
+		if _, err := os.Stat(m.WorkerBinPath); os.IsNotExist(err) {
+			return "", fmt.Errorf("%s not exist", m.WorkerBinPath)
+		}
+		return m.WorkerBinPath, nil
+	}
+
+	workerBinPath, err := exec.LookPath(workerBinName)
+	if err != nil {
+		return "", fmt.Errorf("failed to find the %s command: %w", workerBinName, err)
+	}
+	return workerBinPath, nil
 }
 
 // RemoveWorkers stops and removes all the worker containers.
