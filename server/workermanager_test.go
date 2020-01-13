@@ -1,19 +1,65 @@
 package server
 
-import "testing"
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
 
 func TestWorkerManager_AddWorker(t *testing.T) {
-	manager := &WorkerManager{}
+	manager := &WorkerManager{ServerAddress: "host.docker.internal:48059"}
+
+	_, filename, _, _ := runtime.Caller(0)
+	thisDir := filepath.Dir(filename)
 
 	orgWGName := workerGroupName
 	workerGroupName = "test"
+	orgPath := os.Getenv("PATH")
+	os.Setenv("PATH", filepath.Join(thisDir, "testdata")+":"+orgPath)
 	defer func() {
 		manager.RemoveWorkers()
 		workerGroupName = orgWGName
+		os.Setenv("PATH", orgPath)
 	}()
 
 	err := manager.AddWorker("", "alpine:3.11")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(manager.Workers) != 1 {
+		t.Fatalf("invalid size of workers: %d", len(manager.Workers))
+	}
+	w := manager.Workers[0]
+	if w.ID != 0 {
+		t.Errorf("invalid id: %d", w.ID)
+	}
+	if w.Name != "hornet-worker-test-000" {
+		t.Errorf("invalid name: %s", w.Name)
+	}
+
+	cmd := exec.Command("docker", "logs", w.Name)
+	out, _ := cmd.CombinedOutput()
+	if strings.TrimSpace(string(out)) != "--addr host.docker.internal:48059 --debug" {
+		t.Errorf("invalid output: %s", string(out))
+	}
+}
+
+func TestWorkerManager_AddWorker_NoWorkerBin(t *testing.T) {
+	manager := &WorkerManager{}
+
+	orgPath := os.Getenv("PATH")
+	os.Setenv("PATH", "")
+	defer func() {
+		manager.RemoveWorkers()
+		os.Setenv("PATH", orgPath)
+	}()
+
+	err := manager.AddWorker("", "alpine:3.11")
+	if err == nil {
+		t.Fatalf("nil error")
 	}
 }

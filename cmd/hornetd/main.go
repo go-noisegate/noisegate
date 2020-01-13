@@ -27,13 +27,18 @@ func main() {
 
 			log.EnableDebugLog(c.Bool("debug"))
 
-			return runServer(addr)
+			return runServer(addr, c.String("address-from-container"))
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "debug",
 				Usage: "print the debug logs",
 				Value: false,
+			},
+			&cli.StringFlag{
+				Name:  "address-from-container",
+				Usage: "address to access hornetd server from container",
+				Value: "host.docker.internal:48059",
 			},
 		},
 		HideHelp: true, // to hide the `COMMANDS` section in the help message.
@@ -45,7 +50,7 @@ func main() {
 	}
 }
 
-func runServer(addr string) error {
+func runServer(addr, addrFromContainer string) error {
 	sharedDir, err := ioutil.TempDir("", "hornet")
 	if err != nil {
 		return fmt.Errorf("failed to create the directory to store the test binary: %w", err)

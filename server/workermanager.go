@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/ks888/hornet/common/log"
 )
@@ -10,26 +11,51 @@ import (
 // For the testing purpose, we allow multiple sets of workers.
 var workerGroupName = "default"
 
+const workerBinName = "hornet-worker"
+
 // WorkerManager manages the workers.
 type WorkerManager struct {
-	Workers []Worker
+	ServerAddress string // the hornetd server address usable inside container
+	Workers       []Worker
 }
 
 // AddWorker starts a new worker. `host` specifies daemon socket(s) to connect to. If `host` is empty,
 // the default docker daemon is used.
 func (m *WorkerManager) AddWorker(host, image string) error {
+	workerBinPath, err := exec.LookPath(workerBinName)
+	if err != nil {
+		return fmt.Errorf("failed to find the %s command: %w", workerBinName, err)
+	}
+
 	workerID := len(m.Workers)
 	workerName := fmt.Sprintf("hornet-worker-%s-%03d", workerGroupName, workerID)
 
-	// TODO: workerバイナリを差し込むために、create -> cp -> startの順にする
-	var args []string
+	var commonArgs []string
 	if host != "" {
-		args = append(args, "--host", host)
+		commonArgs = append(commonArgs, "--host", host)
 	}
-	// TODO: 共有ディレクトリのvolumeマウント、workerバイナリの起動コマンド
-	args = append(args, "run", "-d", "--name", workerName, image)
-	cmd := exec.Command("docker", args...)
+
+	createArgs := append(commonArgs, "create", "--volume", sharedDir+":"+sharedDirOnContainer, "--name", workerName, image, workerBinName, "--addr", m.ServerAddress)
+	if log.DebugLogEnabled() {
+		createArgs = append(createArgs, "--debug")
+	}
+	cmd := exec.Command("docker", createArgs...)
 	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to create container: %w\n%s", err, string(out))
+	}
+	containerID := strings.TrimSpace(string(out))
+
+	cpArgs := append(commonArgs, "cp", workerBinPath, containerID+":/usr/bin/"+workerBinName)
+	cmd = exec.Command("docker", cpArgs...)
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to copy binary: %v\n%s", err, string(out))
+	}
+
+	startArgs := append(commonArgs, "start", containerID)
+	cmd = exec.Command("docker", startArgs...)
+	out, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to run the container: %w\noutput:\n%s", err, string(out))
 	}

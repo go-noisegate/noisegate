@@ -9,6 +9,11 @@ func EnableDebugLog(enable bool) {
 	debugLogEnabled = enable
 }
 
+// DebugLogEnabled returns true if the debug log is enabled.
+func DebugLogEnabled() bool {
+	return debugLogEnabled
+}
+
 // Debugf is the wrapper of the standard log.Printf, but printed only when the debug log is enabled.
 func Debugf(format string, v ...interface{}) {
 	if debugLogEnabled {

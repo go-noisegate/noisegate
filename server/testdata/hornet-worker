@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# Empty shell command for the testing purpose
+echo "$@"

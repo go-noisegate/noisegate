@@ -15,7 +15,8 @@ import (
 	"github.com/ks888/hornet/common/log"
 )
 
-var sharedDir string
+var sharedDir string                              // host side
+const sharedDirOnContainer = "/opt/hornet/shared" // container side
 
 // HornetServer serves the APIs for the cli client.
 type HornetServer struct {
@@ -171,13 +172,12 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// TODO: change the path to the valid abs path in the worker container.
 	resp := &common.NextTaskSetResponse{
 		JobID:           job.ID,
 		TaskSetID:       taskSet.ID,
-		LogPath:         taskSet.LogPath,
-		TestBinaryPath:  job.TestBinaryPath,
-		RepoArchivePath: job.RepoArchivePath,
+		LogPath:         filepath.Join(sharedDirOnContainer, taskSet.LogPath),
+		TestBinaryPath:  filepath.Join(sharedDirOnContainer, job.TestBinaryPath),
+		RepoArchivePath: filepath.Join(sharedDirOnContainer, job.RepoArchivePath),
 	}
 	for _, t := range taskSet.Tasks {
 		resp.TestFunctions = append(resp.TestFunctions, t.TestFunction)

@@ -139,13 +139,13 @@ func TestHandleNextTaskSet(t *testing.T) {
 	if len(decodedResp.TestFunctions) != 1 || decodedResp.TestFunctions[0] != "TestFunc1" {
 		t.Errorf("unexpected test functions: %v", decodedResp.TestFunctions)
 	}
-	if decodedResp.LogPath == "" {
+	if decodedResp.LogPath == "/opt/hornet/shared" {
 		t.Errorf("empty log path")
 	}
-	if decodedResp.TestBinaryPath != "/path/to/binary" {
+	if decodedResp.TestBinaryPath != "/opt/hornet/shared/path/to/binary" {
 		t.Errorf("unexpected test binary path: %s", decodedResp.TestBinaryPath)
 	}
-	if decodedResp.RepoArchivePath != "/path/to/archive" {
+	if decodedResp.RepoArchivePath != "/opt/hornet/shared/path/to/archive" {
 		t.Errorf("unexpected test binary path: %s", decodedResp.TestBinaryPath)
 	}
 
