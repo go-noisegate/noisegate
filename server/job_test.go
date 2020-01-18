@@ -20,7 +20,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		log.Fatalf("failed to create temp dir: %v", err)
 	}
-	setSharedDir(dir)
+	SetUpSharedDir(dir)
 
 	log.EnableDebugLog(true)
 

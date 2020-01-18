@@ -20,10 +20,10 @@ import (
 func TestHandleTest_Depth0(t *testing.T) {
 	jobManager := NewJobManager()
 	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	server := NewHornetServer("", jobManager, workerManager)
 
 	_, filename, _, _ := runtime.Caller(0)
-	path := filepath.Join(filepath.Dir(filename), "testdata")
+	path := filepath.Join(filepath.Dir(filename), "testdata", "sum.go")
 	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	go func() {
@@ -36,7 +36,7 @@ func TestHandleTest_Depth0(t *testing.T) {
 	}
 
 	out, _ := ioutil.ReadAll(w.Body)
-	matched, _ := regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+path+`\)$`, out)
+	matched, _ := regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+filepath.Dir(path)+`\)$`, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}
@@ -49,12 +49,12 @@ func TestHandleTest_Depth0(t *testing.T) {
 func TestHandleTest_Depth1(t *testing.T) {
 	jobManager := NewJobManager()
 	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	server := NewHornetServer("", jobManager, workerManager)
 	server.depthLimit = 1
 
 	_, filename, _, _ := runtime.Caller(0)
 	// Importgraph builder ignores testdata dir
-	path := filepath.Dir(filename)
+	path := filepath.Join(filepath.Dir(filename), "server.go")
 	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	go func() {
@@ -68,11 +68,11 @@ func TestHandleTest_Depth1(t *testing.T) {
 	}
 
 	out, _ := ioutil.ReadAll(w.Body)
-	matched, _ := regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+path+`\)$`, out)
+	matched, _ := regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+filepath.Dir(path)+`\)$`, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}
-	matched, _ = regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+filepath.Dir(path)+`/cmd/hornetd\)$`, out)
+	matched, _ = regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+filepath.Dir(filepath.Dir(path))+`/cmd/hornetd\)$`, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}
@@ -81,7 +81,7 @@ func TestHandleTest_Depth1(t *testing.T) {
 func TestHandleTest_EmptyBody(t *testing.T) {
 	jobManager := NewJobManager()
 	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	server := NewHornetServer("", jobManager, workerManager)
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
@@ -120,9 +120,9 @@ func TestHandleNextTaskSet(t *testing.T) {
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	jobManager.AddJob(job)
 
-	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
-	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{"worker_id": 1}`))
+	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
+	server := NewHornetServer("", jobManager, workerManager)
+	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{"worker_id": 0}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
 	if resp.Code != http.StatusOK {
@@ -160,8 +160,8 @@ func TestHandleNextTaskSet(t *testing.T) {
 
 func TestHandleNextTaskSet_NoTaskSet(t *testing.T) {
 	jobManager := NewJobManager()
-	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
+	server := NewHornetServer("", jobManager, workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -180,8 +180,8 @@ func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	jobManager.AddJob(job)
 
-	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
+	server := NewHornetServer("", jobManager, workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -200,8 +200,8 @@ func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 
 func TestHandleNextTaskSet_InvalidReqBody(t *testing.T) {
 	jobManager := NewJobManager()
-	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
+	server := NewHornetServer("", jobManager, workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
@@ -223,7 +223,7 @@ func TestHandleReportResult(t *testing.T) {
 	}
 
 	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	server := NewHornetServer("", jobManager, workerManager)
 	reqBody := common.ReportResultRequest{
 		JobID:      1,
 		TaskSetID:  0,
@@ -258,7 +258,7 @@ func TestHandleReportResult(t *testing.T) {
 func TestHandleReportResult_JobNotFound(t *testing.T) {
 	jobManager := NewJobManager()
 	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	server := NewHornetServer("", jobManager, workerManager)
 	reqBody := common.ReportResultRequest{JobID: 1, TaskSetID: 0, Successful: true}
 	data, _ := json.Marshal(&reqBody)
 	req := httptest.NewRequest(http.MethodGet, common.ReportResultPath, bytes.NewReader(data))
@@ -272,7 +272,7 @@ func TestHandleReportResult_JobNotFound(t *testing.T) {
 func TestHandleReportResult_InvalidJSON(t *testing.T) {
 	jobManager := NewJobManager()
 	workerManager := &WorkerManager{}
-	server := NewHornetServer("", sharedDir, jobManager, workerManager)
+	server := NewHornetServer("", jobManager, workerManager)
 
 	req := httptest.NewRequest(http.MethodGet, common.ReportResultPath, strings.NewReader("{"))
 	resp := httptest.NewRecorder()

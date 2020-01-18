@@ -64,7 +64,7 @@ func BuildImportGraph(ctxt *build.Context, root string) ImportGraph {
 
 func shouldSkipDir(path string) bool {
 	base := filepath.Base(path)
-	if base == "testdata" || base == "vendor" || base == ".git" {
+	if base[0] == '.' || base[0] == '_' || base == "testdata" || base == "vendor" {
 		return true
 	}
 	return false

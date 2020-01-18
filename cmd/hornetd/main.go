@@ -79,34 +79,41 @@ type workerOptions struct {
 }
 
 func runServer(addr string, opt workerOptions) error {
-	sharedDir, err := ioutil.TempDir("", "hornet")
+	tmpDir := "/tmp/hornet"
+	_ = os.Mkdir(tmpDir, os.ModePerm) // may exist already
+
+	sharedDir, err := ioutil.TempDir(tmpDir, "hornet")
 	if err != nil {
 		return fmt.Errorf("failed to create the directory to store the test binary: %w", err)
 	}
 	defer os.RemoveAll(sharedDir)
+	server.SetUpSharedDir(sharedDir)
 
 	jobManager := server.NewJobManager()
 	workerManager := &server.WorkerManager{ServerAddress: opt.addrFromContainer, WorkerBinPath: opt.workerPath}
-	fmt.Printf("start %d workers...\n", opt.numWorkers)
+	// TODO: remove workers if the process exits here (or always remove old workers here anyway?)
+	fmt.Printf("start %d workers\n", opt.numWorkers)
 	for i := 0; i < opt.numWorkers; i++ {
-		workerManager.AddWorker("", opt.image)
+		if err := workerManager.AddWorker("", opt.image); err != nil {
+			return fmt.Errorf("failed to add the worker #%d: %w", i, err)
+		}
 	}
 
-	server := server.NewHornetServer(addr, sharedDir, jobManager, workerManager)
+	server := server.NewHornetServer(addr, jobManager, workerManager)
 	shutdownDoneCh := make(chan struct{})
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, os.Interrupt)
 		<-sigCh
 
-		fmt.Println("shutting down...")
+		fmt.Println("shut down")
 		if err := server.Shutdown(context.Background()); err != nil {
 			log.Printf("failed to shutdown the server: %v", err)
 		}
 		close(shutdownDoneCh)
 	}()
 
-	fmt.Printf("start the hornetd server at %s\n", addr)
+	fmt.Printf("start the server at %s\n", addr)
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("failed to start or close the server: %w", err)
 	}

@@ -21,6 +21,7 @@ type JobManager struct {
 // NewJobManager returns the new job manager.
 func NewJobManager() *JobManager {
 	profiler := NewSimpleProfiler()
+	// TODO: LPT is generally good, but maybe tests associated with the changed file or previously failed tests should be executed first.
 	partitioner := NewLPTPartitioner(profiler)
 	return &JobManager{
 		profiler:    profiler,
@@ -51,6 +52,7 @@ func (m *JobManager) NextTaskSet(groupName string, workerID int) (job *Job, task
 // AddJob partitions the job into the task sets and adds them to the scheduler.
 func (m *JobManager) AddJob(job *Job) {
 	job.TaskSets = m.partitioner.Partition(job, 1)
+	log.Debugf("add the %d task set(s)\n", len(job.TaskSets))
 	for _, taskSet := range job.TaskSets {
 		if len(taskSet.Tasks) == 0 {
 			taskSet.Finish(true)
@@ -85,7 +87,7 @@ func (m *JobManager) ReportResult(jobID int64, taskSetID int, successful bool) e
 			m.profiler.Add(job.DirPath, t.TestFunction, p.elapsedTime)
 			t.Finish(p.successful, p.elapsedTime)
 		} else {
-			log.Printf("failed to detect the result of %s. Consider it's same as the result of the task set (%v)\n", t.TestFunction, successful)
+			log.Printf("failed to detect the result of %s. Assume it's same as the result of the task set: %v\n", t.TestFunction, successful)
 			t.Finish(successful, 0)
 		}
 	}
@@ -112,7 +114,7 @@ func (m *JobManager) parseGoTestLog(logPath string) map[string]rawProfile {
 
 	goTestLog, err := ioutil.ReadFile(logPath)
 	if err != nil {
-		log.Debugf("failed to read the log file %s: %v", logPath, err)
+		log.Debugf("failed to read the log file: %v", err)
 		return profiles
 	}
 

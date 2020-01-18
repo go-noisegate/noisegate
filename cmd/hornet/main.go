@@ -18,7 +18,7 @@ func main() {
 				Name:      "test",
 				Aliases:   []string{"t"},
 				Usage:     "Run a test",
-				ArgsUsage: "[filepath]",
+				ArgsUsage: "[target filepath]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
 						return errors.New("the target filepath is not specified")

@@ -27,7 +27,7 @@ type Executor struct {
 	Workspace string
 }
 
-var waitTime = time.Second
+var waitTime = 100 * time.Millisecond
 
 // Run starts the main loop.
 func (e Executor) Run(ctx context.Context) error {
@@ -42,6 +42,7 @@ func (e Executor) Run(ctx context.Context) error {
 			time.Sleep(waitTime)
 			continue
 		}
+		log.Debugf("next task set: job_id: %d, task_set_id: %d\n", nextTaskSet.JobID, nextTaskSet.TaskSetID)
 
 		successful := false
 		if err := e.createWorkspace(ctx, nextTaskSet); err == nil {
@@ -51,6 +52,8 @@ func (e Executor) Run(ctx context.Context) error {
 			if err := e.removeWorkspace(ctx, nextTaskSet); err != nil {
 				log.Debugf("failed to remove the workspace: %v", err)
 			}
+		} else {
+			log.Printf("failed to create the workspace: %v", err)
 		}
 
 		if err := e.reportResult(ctx, nextTaskSet, successful); err != nil {
@@ -96,6 +99,11 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 }
 
 func (e Executor) createWorkspace(ctx context.Context, taskSet nextTaskSet) error {
+	start := time.Now()
+	defer func() {
+		log.Debugf("time to create the workspace: %v\n", time.Since(start))
+	}()
+
 	if err := os.MkdirAll(e.workspacePath(taskSet), os.ModePerm); err != nil {
 		return err
 	}
@@ -103,7 +111,7 @@ func (e Executor) createWorkspace(ctx context.Context, taskSet nextTaskSet) erro
 	cmd := exec.CommandContext(ctx, "tar", "-xf", taskSet.RepoArchivePath)
 	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("failed to open the log file %s: %w\n", taskSet.LogPath, err)
+		return fmt.Errorf("failed to open the log file: %w\n", err)
 	}
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -120,8 +128,13 @@ func (e Executor) workspacePath(taskSet nextTaskSet) string {
 }
 
 func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
+	start := time.Now()
+	defer func() {
+		log.Debugf("time to execute the binary: %v\n", time.Since(start))
+	}()
+
 	cmd := exec.CommandContext(ctx, taskSet.TestBinaryPath, "-test.v", "-test.run", strings.Join(taskSet.TestFunctions, "|"))
-	cmd.Dir = e.workspacePath(taskSet)
+	cmd.Dir = filepath.Join(e.workspacePath(taskSet), taskSet.RepoToPackagePath)
 
 	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
@@ -136,6 +149,11 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 }
 
 func (e Executor) removeWorkspace(ctx context.Context, taskSet nextTaskSet) error {
+	start := time.Now()
+	defer func() {
+		log.Debugf("time to remove the workspace: %v\n", time.Since(start))
+	}()
+
 	return os.RemoveAll(e.workspacePath(taskSet))
 }
 
