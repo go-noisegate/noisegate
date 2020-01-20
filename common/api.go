@@ -8,11 +8,19 @@ package common
 
 const cliAPIPrefix = "/cli"
 
-// TestPath represents the path of the test API.
-const TestPath = cliAPIPrefix + "/test"
+// the API pathes
+const (
+	TestPath  = cliAPIPrefix + "/test"
+	WatchPath = cliAPIPrefix + "/watch"
+)
 
 // TestRequest represents the input data to the test API.
 type TestRequest struct {
+	Path string `json:"path"`
+}
+
+// WatchRequest represents the input data to the watch API.
+type WatchRequest struct {
 	Path string `json:"path"`
 }
 

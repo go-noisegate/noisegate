@@ -69,6 +69,7 @@ func (m *WorkerManager) AddWorker(host, image string) error {
 	return nil
 }
 
+// TODO: leave the doc to explain the logic here.
 func (m *WorkerManager) findBinPath() (string, error) {
 	if m.WorkerBinPath != "" {
 		if _, err := os.Stat(m.WorkerBinPath); os.IsNotExist(err) {

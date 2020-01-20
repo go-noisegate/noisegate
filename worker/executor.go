@@ -86,7 +86,7 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 		return nextTaskSet{}, errNoTaskSet
 	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		return nextTaskSet{}, fmt.Errorf("failed to get next task set: %s", string(body))
+		return nextTaskSet{}, fmt.Errorf("failed to get next task set: %s: %s", resp.Status, string(body))
 	}
 
 	respData := common.NextTaskSetResponse{}
