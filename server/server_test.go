@@ -7,9 +7,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -17,13 +17,52 @@ import (
 	"github.com/ks888/hornet/common"
 )
 
+func TestHandleWatch(t *testing.T) {
+	// jobManager := NewJobManager()
+	// workerManager := &WorkerManager{}
+	// server := NewHornetServer("", jobManager, workerManager)
+
+	// curr, err := os.Getwd()
+	// if err != nil {
+	// 	t.Fatalf("failed to get wd: %v", err)
+	// }
+	// path := filepath.Join(curr, "testdata", "sum.go")
+	// req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
+	// w := httptest.NewRecorder()
+	// go func() {
+	// 	executeTaskSet(t, jobManager)
+	// }()
+	// server.handleTest(w, req)
+
+	// if w.Code != http.StatusOK {
+	// 	t.Errorf("unexpected code: %d", w.Code)
+	// }
+
+	// out, _ := ioutil.ReadAll(w.Body)
+	// matched, _ := regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(path)+`\) `, out)
+	// if !matched {
+	// 	t.Errorf("unexpected content: %s", string(out))
+	// }
+	// matched, _ = regexp.Match(`(?m)^ok$`, out)
+	// if !matched {
+	// 	t.Errorf("unexpected content: %s", string(out))
+	// }
+	// matched, _ = regexp.Match(`(?m)^PASS: Job#\d+ \(`+filepath.Dir(path)+`\) `, out)
+	// if !matched {
+	// 	t.Errorf("unexpected content: %s", string(out))
+	// }
+}
+
 func TestHandleTest_Depth0(t *testing.T) {
 	jobManager := NewJobManager()
 	workerManager := &WorkerManager{}
 	server := NewHornetServer("", jobManager, workerManager)
 
-	_, filename, _, _ := runtime.Caller(0)
-	path := filepath.Join(filepath.Dir(filename), "testdata", "sum.go")
+	curr, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
+	path := filepath.Join(curr, "testdata", "sum.go")
 	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	go func() {
@@ -36,11 +75,15 @@ func TestHandleTest_Depth0(t *testing.T) {
 	}
 
 	out, _ := ioutil.ReadAll(w.Body)
-	matched, _ := regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+filepath.Dir(path)+`\)$`, out)
+	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(path)+`\) `, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}
 	matched, _ = regexp.Match(`(?m)^ok$`, out)
+	if !matched {
+		t.Errorf("unexpected content: %s", string(out))
+	}
+	matched, _ = regexp.Match(`(?m)^PASS: Job#\d+ \(`+filepath.Dir(path)+`\) `, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}
@@ -52,9 +95,12 @@ func TestHandleTest_Depth1(t *testing.T) {
 	server := NewHornetServer("", jobManager, workerManager)
 	server.depthLimit = 1
 
-	_, filename, _, _ := runtime.Caller(0)
+	curr, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
 	// Importgraph builder ignores testdata dir
-	path := filepath.Join(filepath.Dir(filename), "server.go")
+	path := filepath.Join(curr, "server.go")
 	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	go func() {
@@ -68,11 +114,11 @@ func TestHandleTest_Depth1(t *testing.T) {
 	}
 
 	out, _ := ioutil.ReadAll(w.Body)
-	matched, _ := regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+filepath.Dir(path)+`\)$`, out)
+	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(path)+`\) `, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}
-	matched, _ = regexp.Match(`(?m)^=== PASS \(job: \d+, task set: 0, path: `+filepath.Dir(filepath.Dir(path))+`/cmd/hornetd\)$`, out)
+	matched, _ = regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(filepath.Dir(path))+`/cmd/hornetd\) `, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}

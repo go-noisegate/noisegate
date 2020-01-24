@@ -20,12 +20,13 @@ import (
 var sharedDir string                              // host side
 const sharedDirOnContainer = "/opt/hornet/shared" // container side
 
-// SetUpSharedDir sets up the specified share directory.
+// SetUpSharedDir initializes the specified directory.
 func SetUpSharedDir(dir string) {
 	sharedDir = dir
 	os.Mkdir(filepath.Join(sharedDir, "bin"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "lib"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "log"), os.ModePerm)
+	os.Mkdir(filepath.Join(sharedDir, "src"), os.ModePerm)
 }
 
 // HornetServer serves the APIs for the cli client.
@@ -60,6 +61,20 @@ func (s HornetServer) Shutdown(ctx context.Context) error {
 	return err
 }
 
+func (s HornetServer) handleWatch(w http.ResponseWriter, r *http.Request) {
+	var input common.TestRequest
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&input); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	log.Printf("watch %s\n", input.Path)
+	pathDir := filepath.Dir(input.Path)
+
+	// watch here
+	pathDir = pathDir
+}
+
 func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	var input common.TestRequest
 	dec := json.NewDecoder(r.Body)
@@ -67,7 +82,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	fmt.Printf("test %s\n", input.Path)
+	log.Printf("test %s\n", input.Path)
 	pathDir := filepath.Dir(input.Path)
 
 	getImportGraph := s.asyncBuildImportGraph(pathDir)
@@ -131,11 +146,7 @@ func (s HornetServer) runAndWaitJob(w http.ResponseWriter, job *Job) {
 func (s HornetServer) asyncBuildImportGraph(path string) (getImportGraph func() *ImportGraph) {
 	importGraphCh := make(chan *ImportGraph, 1)
 	go func() {
-		repoRoot, err := findRepoRoot(path)
-		if err != nil {
-			log.Printf("failed to find the repository root of %s: %v", path, err)
-			repoRoot = path
-		}
+		repoRoot := findRepoRoot(path)
 		ctxt := &build.Default
 		importGraph := BuildImportGraph(ctxt, repoRoot)
 		importGraphCh <- &importGraph

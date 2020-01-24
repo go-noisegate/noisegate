@@ -125,11 +125,15 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 	return job, nil
 }
 
-func findRepoRoot(dir string) (string, error) {
+func findRepoRoot(dir string) string {
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	cmd.Dir = dir
 	out, err := cmd.Output()
-	return strings.TrimSpace(string(out)), err
+	if err != nil {
+		log.Printf("failed to find the repository root: %v", err)
+		return dir
+	}
+	return strings.TrimSpace(string(out))
 }
 
 var errNoGoTestFiles = errors.New("no go test files (though there may be go files)")
@@ -156,12 +160,7 @@ func buildTestBinary(dirPath string, jobID int64) (string, error) {
 }
 
 func archiveRepository(dirPath string, jobID int64) (string, string, error) {
-	root, err := findRepoRoot(dirPath)
-	if err != nil {
-		log.Debugf("failed to find the repo root of %s: %v", dirPath, err)
-		root = dirPath
-	}
-
+	root := findRepoRoot(dirPath)
 	rel, err := filepath.Rel(root, dirPath)
 	if err != nil {
 		return "", "", err

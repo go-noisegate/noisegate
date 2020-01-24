@@ -55,6 +55,7 @@ func (m *JobManager) AddJob(job *Job) {
 	log.Debugf("add the %d task set(s)\n", len(job.TaskSets))
 	for _, taskSet := range job.TaskSets {
 		if len(taskSet.Tasks) == 0 {
+			taskSet.Start("", 0)
 			taskSet.Finish(true)
 			continue
 		}

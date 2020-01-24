@@ -92,7 +92,7 @@ func runServer(addr string, opt workerOptions) error {
 	jobManager := server.NewJobManager()
 	workerManager := &server.WorkerManager{ServerAddress: opt.addrFromContainer, WorkerBinPath: opt.workerPath}
 	// TODO: remove workers if the process exits here (or always remove old workers here anyway?)
-	fmt.Printf("start %d workers\n", opt.numWorkers)
+	log.Printf("start %d workers\n", opt.numWorkers)
 	for i := 0; i < opt.numWorkers; i++ {
 		if err := workerManager.AddWorker("", opt.image); err != nil {
 			return fmt.Errorf("failed to add the worker #%d: %w", i, err)
@@ -106,14 +106,14 @@ func runServer(addr string, opt workerOptions) error {
 		signal.Notify(sigCh, os.Interrupt)
 		<-sigCh
 
-		fmt.Println("shut down")
+		log.Println("shut down")
 		if err := server.Shutdown(context.Background()); err != nil {
 			log.Printf("failed to shutdown the server: %v", err)
 		}
 		close(shutdownDoneCh)
 	}()
 
-	fmt.Printf("start the server at %s\n", addr)
+	log.Printf("start the server at %s\n", addr)
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		return fmt.Errorf("failed to start or close the server: %w", err)
 	}

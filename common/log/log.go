@@ -35,3 +35,8 @@ func Fatalf(format string, v ...interface{}) {
 func Printf(format string, v ...interface{}) {
 	log.Printf(format, v...)
 }
+
+// Println is the wrapper of the standard log.Println.
+func Println(v ...interface{}) {
+	log.Println(v...)
+}

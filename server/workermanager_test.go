@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -12,13 +11,10 @@ import (
 func TestWorkerManager_AddWorker(t *testing.T) {
 	manager := &WorkerManager{ServerAddress: "host.docker.internal:48059"}
 
-	_, filename, _, _ := runtime.Caller(0)
-	thisDir := filepath.Dir(filename)
-
 	orgWGName := workerGroupName
 	workerGroupName = "test"
 	orgPath := os.Getenv("PATH")
-	os.Setenv("PATH", filepath.Join(thisDir, "testdata")+":"+orgPath)
+	os.Setenv("PATH", "testdata"+string(filepath.ListSeparator)+orgPath)
 	defer func() {
 		manager.RemoveWorkers()
 		workerGroupName = orgWGName
