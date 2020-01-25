@@ -18,8 +18,8 @@ type RepositoryManager struct {
 }
 
 // NewRepositoryManager initializes the repository manager and returns its object.
-func NewRepositoryManager() RepositoryManager {
-	return RepositoryManager{repos: make(map[string]*SyncedRepository)}
+func NewRepositoryManager() *RepositoryManager {
+	return &RepositoryManager{repos: make(map[string]*SyncedRepository)}
 }
 
 // Watch watches the repository to which the specified `path` belongs.

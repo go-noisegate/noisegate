@@ -32,16 +32,16 @@ func SetUpSharedDir(dir string) {
 // HornetServer serves the APIs for the cli client.
 type HornetServer struct {
 	*http.Server
-	jobManager    *JobManager
-	workerManager *WorkerManager
-	depthLimit    int
+	jobManager        *JobManager
+	workerManager     *WorkerManager
+	repositoryManager *RepositoryManager
+	depthLimit        int
 }
 
 // NewHornetServer returns the new hornet server.
 // We can use only one server instance in the process even if the address is different.
-func NewHornetServer(addr string, jobManager *JobManager, workerManager *WorkerManager) HornetServer {
-	// TODO: load the depthLimit value from the setting file
-	s := HornetServer{jobManager: jobManager, workerManager: workerManager}
+func NewHornetServer(addr string, jobManager *JobManager, workerManager *WorkerManager, repositoryManager *RepositoryManager) HornetServer {
+	s := HornetServer{jobManager: jobManager, workerManager: workerManager, repositoryManager: repositoryManager}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(common.TestPath, s.handleTest)
@@ -68,11 +68,21 @@ func (s HornetServer) handleWatch(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	log.Printf("watch %s\n", input.Path)
-	pathDir := filepath.Dir(input.Path)
 
-	// watch here
-	pathDir = pathDir
+	if _, err := os.Stat(input.Path); os.IsNotExist(err) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("the specified path not found\n"))
+		return
+	}
+
+	log.Printf("watch %s\n", input.Path)
+
+	if err := s.repositoryManager.Watch(input.Path); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("failed to watch %s: %v", input.Path, err)
+		return
+	}
+	w.Write([]byte("accepted\n"))
 }
 
 func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +92,13 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	if _, err := os.Stat(input.Path); os.IsNotExist(err) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("the specified path not found\n"))
+		return
+	}
+
 	log.Printf("test %s\n", input.Path)
 	pathDir := filepath.Dir(input.Path)
 

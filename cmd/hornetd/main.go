@@ -98,8 +98,9 @@ func runServer(addr string, opt workerOptions) error {
 			return fmt.Errorf("failed to add the worker #%d: %w", i, err)
 		}
 	}
+	repositoryManager := server.NewRepositoryManager()
 
-	server := server.NewHornetServer(addr, jobManager, workerManager)
+	server := server.NewHornetServer(addr, jobManager, workerManager, repositoryManager)
 	shutdownDoneCh := make(chan struct{})
 	go func() {
 		sigCh := make(chan os.Signal, 1)

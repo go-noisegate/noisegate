@@ -125,13 +125,23 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 	return job, nil
 }
 
-func findRepoRoot(dir string) string {
+func findRepoRoot(path string) string {
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		log.Printf("%s not found", path)
+		return path
+	}
+	dirPath := path
+	if !fi.IsDir() {
+		dirPath = filepath.Dir(path)
+	}
+
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	cmd.Dir = dir
+	cmd.Dir = dirPath
 	out, err := cmd.Output()
 	if err != nil {
 		log.Printf("failed to find the repository root: %v", err)
-		return dir
+		return dirPath
 	}
 	return strings.TrimSpace(string(out))
 }

@@ -291,3 +291,35 @@ func TestLPTPartition_EmptyProfile(t *testing.T) {
 		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[1])
 	}
 }
+
+func TestFindRepoRoot_File(t *testing.T) {
+	curr, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
+
+	repoRoot := findRepoRoot("job_test.go")
+	if repoRoot != filepath.Dir(curr) {
+		t.Errorf("unexpected repo root: %s", repoRoot)
+	}
+}
+
+func TestFindRepoRoot_Dir(t *testing.T) {
+	curr, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
+
+	repoRoot := findRepoRoot(".")
+	if repoRoot != filepath.Dir(curr) {
+		t.Errorf("unexpected repo root: %s", repoRoot)
+	}
+}
+
+func TestFindRepoRoot_NotExist(t *testing.T) {
+	path := "/path/to/not/exist/file"
+	repoRoot := findRepoRoot(path)
+	if repoRoot != path {
+		t.Errorf("unexpected repo root: %s", repoRoot)
+	}
+}
