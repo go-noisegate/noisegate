@@ -83,33 +83,22 @@ func TestRepositoryManager_Watch_NotSync(t *testing.T) {
 }
 
 func TestSyncedRepository_SyncInLock(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet_test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	repo := NewSyncedRepository(filepath.Join("testdata", "repositorymanager")+string(filepath.Separator), tempDir)
+	repo := NewSyncedRepository(filepath.Join("testdata", "repositorymanager") + string(filepath.Separator))
+	defer os.RemoveAll(repo.destPath)
 	repo.Lock(nil)
 
-	err = repo.SyncInLock()
-	if err != nil {
+	if err := repo.SyncInLock(); err != nil {
 		t.Fatalf("sync error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(tempDir, "sum.go")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(repo.destPath, "sum.go")); os.IsNotExist(err) {
 		t.Errorf("sum.go not exist")
 	}
 	repo.Unlock()
 }
 
 func TestSyncedRepository_LockAndUnlock(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet_test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	repo := NewSyncedRepository(filepath.Join("testdata", "repositorymanager") + string(filepath.Separator))
 
-	repo := NewSyncedRepository(filepath.Join("testdata", "repositorymanager")+string(filepath.Separator), tempDir)
 	job := &Job{}
 	repo.Lock(job)
 	if !repo.used {
@@ -129,13 +118,7 @@ func TestSyncedRepository_LockAndUnlock(t *testing.T) {
 }
 
 func TestSyncedRepository_ConcurrentUse(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet_test")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	repo := NewSyncedRepository(filepath.Join("testdata", "repositorymanager")+string(filepath.Separator), tempDir)
+	repo := NewSyncedRepository(filepath.Join("testdata", "repositorymanager") + string(filepath.Separator))
 
 	const numGoRoutines = 10
 	errCh := make(chan error)

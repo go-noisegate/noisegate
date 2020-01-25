@@ -44,17 +44,11 @@ func (e Executor) Run(ctx context.Context) error {
 		}
 		log.Debugf("next task set: job_id: %d, task_set_id: %d\n", nextTaskSet.JobID, nextTaskSet.TaskSetID)
 
-		successful := false
-		if err := e.createWorkspace(ctx, nextTaskSet); err == nil {
-			err := e.execute(ctx, nextTaskSet)
-			successful = err == nil
-
-			if err := e.removeWorkspace(ctx, nextTaskSet); err != nil {
-				log.Debugf("failed to remove the workspace: %v", err)
-			}
-		} else {
-			log.Printf("failed to create the workspace: %v", err)
+		err = e.execute(ctx, nextTaskSet)
+		if err != nil {
+			log.Printf("execution failed: %v", err)
 		}
+		successful := err == nil
 
 		if err := e.reportResult(ctx, nextTaskSet, successful); err != nil {
 			log.Printf("failed to report the result: %v", err)
@@ -98,31 +92,6 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 	return nextTaskSet(respData), nil
 }
 
-func (e Executor) createWorkspace(ctx context.Context, taskSet nextTaskSet) error {
-	start := time.Now()
-	defer func() {
-		log.Debugf("time to create the workspace: %v\n", time.Since(start))
-	}()
-
-	if err := os.MkdirAll(e.workspacePath(taskSet), os.ModePerm); err != nil {
-		return err
-	}
-
-	cmd := exec.CommandContext(ctx, "tar", "-xf", taskSet.RepoArchivePath)
-	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
-	if err != nil {
-		return fmt.Errorf("failed to open the log file: %w\n", err)
-	}
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-
-	cmd.Dir = e.workspacePath(taskSet)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to archive: %w", err)
-	}
-	return nil
-}
-
 func (e Executor) workspacePath(taskSet nextTaskSet) string {
 	return filepath.Join(e.Workspace, strconv.FormatInt(taskSet.JobID, 10))
 }
@@ -134,7 +103,7 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 	}()
 
 	cmd := exec.CommandContext(ctx, taskSet.TestBinaryPath, "-test.v", "-test.run", strings.Join(taskSet.TestFunctions, "|"))
-	cmd.Dir = filepath.Join(e.workspacePath(taskSet), taskSet.RepoToPackagePath)
+	cmd.Dir = filepath.Join(taskSet.RepoPath, taskSet.RepoToPackagePath)
 
 	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
@@ -146,15 +115,6 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 		return fmt.Errorf("failed to execute the task set: %w", err)
 	}
 	return nil
-}
-
-func (e Executor) removeWorkspace(ctx context.Context, taskSet nextTaskSet) error {
-	start := time.Now()
-	defer func() {
-		log.Debugf("time to remove the workspace: %v\n", time.Since(start))
-	}()
-
-	return os.RemoveAll(e.workspacePath(taskSet))
 }
 
 func (e Executor) reportResult(ctx context.Context, taskSet nextTaskSet, successful bool) error {

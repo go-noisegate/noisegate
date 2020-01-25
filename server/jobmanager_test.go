@@ -22,7 +22,7 @@ func TestJobManager_AddJob(t *testing.T) {
 }
 
 func TestJobManager_AddJob_NoTasks(t *testing.T) {
-	job := &Job{ID: 1, finishedCh: make(chan struct{})}
+	job := &Job{ID: 1, finishedCh: make(chan struct{}), Repository: NewSyncedRepository("/path/to/file")}
 
 	manager := NewJobManager()
 	manager.AddJob(job)

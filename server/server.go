@@ -239,7 +239,7 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 		TaskSetID:         taskSet.ID,
 		LogPath:           filepath.Join(sharedDirOnContainer, taskSet.LogPath),
 		TestBinaryPath:    filepath.Join(sharedDirOnContainer, job.TestBinaryPath),
-		RepoArchivePath:   filepath.Join(sharedDirOnContainer, job.RepoArchivePath),
+		RepoPath:          filepath.Join(sharedDirOnContainer, job.Repository.destPathFromSharedDir),
 		RepoToPackagePath: job.RepoToPackagePath,
 	}
 	for _, t := range taskSet.Tasks {

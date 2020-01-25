@@ -27,7 +27,6 @@ func NewRepositoryManager() *RepositoryManager {
 // No-op if the repository is already watched.
 func (m *RepositoryManager) Watch(path string, sync bool) error {
 	srcPath := m.srcPath(path)
-	destPath := filepath.Join(sharedDir, "src", srcPath)
 
 	addRepo := func() (*SyncedRepository, error) {
 		m.mtx.Lock()
@@ -37,10 +36,7 @@ func (m *RepositoryManager) Watch(path string, sync bool) error {
 			return nil, nil
 		}
 
-		if err := os.MkdirAll(destPath, os.ModePerm); err != nil {
-			return nil, err
-		}
-		repo := NewSyncedRepository(srcPath, destPath)
+		repo := NewSyncedRepository(srcPath)
 		repo.Lock(nil) // prevent other go routines touch the repo before sync.
 		m.repos[srcPath] = repo
 		return repo, nil
@@ -85,39 +81,41 @@ func (m *RepositoryManager) Find(path string) (*SyncedRepository, bool) {
 	return repo, ok
 }
 
-func (m *RepositoryManager) addRepository(srcPath, destPath string) (*SyncedRepository, error) {
-	repo := NewSyncedRepository(srcPath, destPath)
-	m.repos[srcPath] = repo
-	return repo, nil
-}
-
 // SyncedRepository represents the repository which is shared among all the workers.
 // The repository is copied from the original repository.
 type SyncedRepository struct {
-	srcPath  string
-	destPath string
-	mtx      sync.Mutex
-	cond     *sync.Cond
-	used     bool
-	usedBy   *Job
+	srcPath               string
+	destPath              string
+	destPathFromSharedDir string
+	mtx                   sync.Mutex
+	cond                  *sync.Cond
+	used                  bool
+	usedBy                *Job
 }
 
 // NewSyncedRepository returns the initialized SyncedRepository object.
 // if `srcPath` ends with `/`, the contents of the `srcPath` is copied.
 // Otherwise, the `srcPath` directory itself is also copied.
-// Assumes the `srcPath` and `destPath` exist.
-func NewSyncedRepository(srcPath, destPath string) *SyncedRepository {
+func NewSyncedRepository(srcPath string) *SyncedRepository {
+	destPathFromSharedDir := filepath.Join("src", srcPath)
+	destPath := filepath.Join(sharedDir, destPathFromSharedDir)
 	repo := &SyncedRepository{
-		srcPath:  srcPath,
-		destPath: destPath,
+		srcPath:               srcPath,
+		destPath:              destPath,
+		destPathFromSharedDir: destPathFromSharedDir,
 	}
 	repo.cond = sync.NewCond(&repo.mtx)
+
 	return repo
 }
 
 // SyncInLock copies the sources from the original repository.
 // The caller of this function must lock the repository.
 func (r *SyncedRepository) SyncInLock() error {
+	if err := os.MkdirAll(r.destPath, os.ModePerm); err != nil {
+		return err
+	}
+
 	// The quick experiment using 200MB size repository shows the `-z` option is not necessary.
 	cmd := exec.Command("rsync", "-a", "--delete", r.srcPath, r.destPath)
 	out, err := cmd.CombinedOutput()

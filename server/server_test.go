@@ -203,7 +203,11 @@ func executeTaskSet(t *testing.T, jobManager *JobManager) {
 
 func TestHandleNextTaskSet(t *testing.T) {
 	jobManager := NewJobManager()
-	job := &Job{ID: 1, DirPath: "/path/to/dir/", TestBinaryPath: "/path/to/binary", RepoArchivePath: "/path/to/archive", finishedCh: make(chan struct{})}
+	dirPath := "/path/to/dir/"
+	repo := NewSyncedRepository(dirPath)
+	defer os.RemoveAll(repo.destPath)
+
+	job := &Job{ID: 1, DirPath: dirPath, TestBinaryPath: "/path/to/binary", Repository: repo, finishedCh: make(chan struct{})}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	jobManager.AddJob(job)
 
@@ -236,8 +240,8 @@ func TestHandleNextTaskSet(t *testing.T) {
 	if decodedResp.TestBinaryPath != "/opt/hornet/shared/path/to/binary" {
 		t.Errorf("unexpected test binary path: %s", decodedResp.TestBinaryPath)
 	}
-	if decodedResp.RepoArchivePath != "/opt/hornet/shared/path/to/archive" {
-		t.Errorf("unexpected test binary path: %s", decodedResp.TestBinaryPath)
+	if decodedResp.RepoPath != filepath.Clean("/opt/hornet/shared/src"+dirPath) {
+		t.Errorf("unexpected test repo archive path: %s", decodedResp.RepoPath)
 	}
 
 	if taskSet.Status != TaskSetStatusStarted {
@@ -260,10 +264,10 @@ func TestHandleNextTaskSet_NoTaskSet(t *testing.T) {
 
 func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 	jobManager := NewJobManager()
-	emptyJob := &Job{ID: 1, finishedCh: make(chan struct{})}
+	emptyJob := &Job{ID: 1, finishedCh: make(chan struct{}), Repository: NewSyncedRepository("/path/to/file")}
 	jobManager.AddJob(emptyJob)
 
-	job := &Job{ID: 2, finishedCh: make(chan struct{})}
+	job := &Job{ID: 2, finishedCh: make(chan struct{}), Repository: NewSyncedRepository("/path/to/file")}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
 	jobManager.AddJob(job)
 
@@ -298,7 +302,7 @@ func TestHandleNextTaskSet_InvalidReqBody(t *testing.T) {
 }
 
 func TestHandleReportResult(t *testing.T) {
-	job := &Job{ID: 1, finishedCh: make(chan struct{})}
+	job := &Job{ID: 1, finishedCh: make(chan struct{}), Repository: NewSyncedRepository("/path/to/file")}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestJobManager_ReportResult", Job: job})
 	jobManager := NewJobManager()
 	jobManager.AddJob(job)

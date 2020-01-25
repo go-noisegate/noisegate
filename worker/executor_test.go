@@ -24,46 +24,41 @@ func TestRun(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	_, filename, _, _ := runtime.Caller(0)
-	thisDir := filepath.Dir(filename)
-
 	testCases := []struct {
 		input  nextTaskSet
 		expect bool
 	}{
 		{
 			input: nextTaskSet{
-				JobID:           1,
-				TaskSetID:       1,
-				LogPath:         filepath.Join(tempDir, "testlog"),
-				RepoArchivePath: filepath.Join(thisDir, "testdata", "repo.tar"),
-				TestBinaryPath:  "echo",
+				JobID:          1,
+				TaskSetID:      1,
+				LogPath:        filepath.Join(tempDir, "testlog"),
+				TestBinaryPath: "echo",
 			},
 			expect: true,
 		},
 		{
 			input: nextTaskSet{
-				JobID:           1,
-				TaskSetID:       1,
-				LogPath:         filepath.Join(tempDir, "testlog"),
-				RepoArchivePath: "/path/to/not/exist/file",
-				TestBinaryPath:  "echo",
+				JobID:          1,
+				TaskSetID:      1,
+				LogPath:        filepath.Join(tempDir, "testlog"),
+				RepoPath:       "/path/to/not/exist/file",
+				TestBinaryPath: "echo",
 			},
 			expect: false,
 		},
 		{
 			input: nextTaskSet{
-				JobID:           1,
-				TaskSetID:       1,
-				LogPath:         filepath.Join(tempDir, "testlog"),
-				RepoArchivePath: filepath.Join(thisDir, "testdata", "repo.tar"),
-				TestBinaryPath:  "cmd-not-exist",
+				JobID:          1,
+				TaskSetID:      1,
+				LogPath:        filepath.Join(tempDir, "testlog"),
+				TestBinaryPath: "cmd-not-exist",
 			},
 			expect: false,
 		},
 	}
 
-	for _, testCase := range testCases {
+	for i, testCase := range testCases {
 		done := make(chan struct{})
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
@@ -96,7 +91,7 @@ func TestRun(t *testing.T) {
 			t.Fatalf("not canceled error: %v", err)
 		}
 		if !strings.Contains(string(rawReport), fmt.Sprintf(`"successful":%v`, testCase.expect)) {
-			t.Errorf("invalid report: %s", string(rawReport))
+			t.Errorf("[%d] invalid report: %s", i, string(rawReport))
 		}
 	}
 }
@@ -162,97 +157,6 @@ func TestNextTaskSet_ServerError(t *testing.T) {
 	}
 }
 
-func TestCreateWorkspace(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet-test")
-	if err != nil {
-		t.Errorf("failed to create the temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	_, filename, _, _ := runtime.Caller(0)
-	thisDir := filepath.Dir(filename)
-
-	taskSet := nextTaskSet{
-		JobID:           1,
-		LogPath:         filepath.Join(tempDir, "testlog"),
-		RepoArchivePath: filepath.Join(thisDir, "testdata", "repo.tar"),
-	}
-	e := Executor{Workspace: tempDir}
-	if err := e.createWorkspace(context.Background(), taskSet); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(e.workspacePath(taskSet), "README.md")); os.IsNotExist(err) {
-		t.Errorf("failed to create ws")
-	}
-}
-
-func TestCreateWorkspace_InvalidPath(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet-test")
-	if err != nil {
-		t.Errorf("failed to create the temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	logPath := filepath.Join(tempDir, "testlog")
-	taskSet := nextTaskSet{
-		LogPath:         logPath,
-		RepoArchivePath: "/path/to/not/exist/file",
-	}
-	e := Executor{Workspace: tempDir}
-	if err := e.createWorkspace(context.Background(), taskSet); err == nil {
-		t.Fatalf("nil error: %v", err)
-	}
-	out, err := ioutil.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if string(out) == "" {
-		t.Errorf("empty log")
-	}
-}
-
-func TestCreateWorkspace_LogPathNotFound(t *testing.T) {
-	_, filename, _, _ := runtime.Caller(0)
-	thisDir := filepath.Dir(filename)
-
-	taskSet := nextTaskSet{
-		LogPath:        "/path/to/not/exist/file",
-		TestBinaryPath: "echo",
-	}
-	e := Executor{Workspace: thisDir}
-	if err := e.createWorkspace(context.Background(), taskSet); err == nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-func TestCreateWorkspace_LogFileHasExistingData(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet-test")
-	if err != nil {
-		t.Fatalf("failed to create the temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	logPath := filepath.Join(tempDir, "testlog")
-	if err := ioutil.WriteFile(logPath, []byte("initial data"), os.ModePerm); err != nil {
-		t.Fatalf("failed to write the data to temp file %s: %v", logPath, err)
-	}
-
-	taskSet := nextTaskSet{
-		LogPath:         logPath,
-		RepoArchivePath: "/path/to/not/exist/file",
-	}
-	e := Executor{Workspace: tempDir}
-	if err := e.createWorkspace(context.Background(), taskSet); err == nil {
-		t.Fatalf("nil error: %v", err)
-	}
-	out, err := ioutil.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.HasPrefix(string(out), "initial data") {
-		t.Errorf("existing data is removed")
-	}
-}
-
 func TestExecute(t *testing.T) {
 	tempFile, err := ioutil.TempFile("", "hornet-test")
 	if err != nil {
@@ -269,9 +173,6 @@ func TestExecute(t *testing.T) {
 		TestBinaryPath: "echo",
 	}
 	e := Executor{Workspace: thisDir}
-	if err := e.createWorkspace(context.Background(), taskSet); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	if err := e.execute(context.Background(), taskSet); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -293,9 +194,6 @@ func TestExecute_ExitCodeNot0(t *testing.T) {
 		TestBinaryPath: "cmd-not-exist",
 	}
 	e := Executor{}
-	if err := e.createWorkspace(context.Background(), taskSet); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	if err := e.execute(context.Background(), taskSet); err == nil {
 		t.Fatalf("nil error")
 	}

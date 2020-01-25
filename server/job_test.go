@@ -31,14 +31,9 @@ func TestNewJob(t *testing.T) {
 	}
 	dirPath := filepath.Join(currDir, "testdata")
 	repoRoot := filepath.Dir(currDir) + string(filepath.Separator)
+	repo := NewSyncedRepository(repoRoot)
+	defer os.RemoveAll(repo.destPath)
 
-	destDir, err := ioutil.TempDir("", "hornet_test")
-	if err != nil {
-		log.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(destDir)
-
-	repo := NewSyncedRepository(repoRoot, destDir)
 	job, err := NewJob(dirPath, repo, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
@@ -91,8 +86,8 @@ func checkRepositoryContent(t *testing.T, repoPath, filenameToCheck string) {
 }
 
 func TestNewJob_InvalidDirPath(t *testing.T) {
-	dirPath := "/not/exist"
-	_, err := NewJob(dirPath, NewSyncedRepository("/not", ""), 1)
+	dirPath := "/not/exist/dir"
+	_, err := NewJob(dirPath, NewSyncedRepository("/not/exist"), 1)
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
@@ -101,13 +96,8 @@ func TestNewJob_InvalidDirPath(t *testing.T) {
 func TestNewJob_UniqueIDCheck(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata", "no_go_files")
-
-	destDir, err := ioutil.TempDir("", "hornet_test")
-	if err != nil {
-		log.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(destDir)
-	repo := NewSyncedRepository(dirPath, destDir)
+	repo := NewSyncedRepository(dirPath)
+	defer os.RemoveAll(repo.destPath)
 
 	ch := make(chan int64)
 	numGoRoutines := 10
@@ -139,13 +129,10 @@ func TestNewJob_NoGoFiles(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata", "no_go_files")
 
-	destDir, err := ioutil.TempDir("", "hornet_test")
-	if err != nil {
-		log.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(destDir)
+	repo := NewSyncedRepository(dirPath)
+	defer os.RemoveAll(repo.destPath)
 
-	job, err := NewJob(dirPath, NewSyncedRepository(dirPath, destDir), 1)
+	job, err := NewJob(dirPath, repo, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -161,13 +148,10 @@ func TestNewJob_NoGoTestFiles(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata", "no_go_test_files")
 
-	destDir, err := ioutil.TempDir("", "hornet_test")
-	if err != nil {
-		log.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(destDir)
+	repo := NewSyncedRepository(dirPath)
+	defer os.RemoveAll(repo.destPath)
 
-	job, err := NewJob(dirPath, NewSyncedRepository(dirPath, destDir), 1)
+	job, err := NewJob(dirPath, repo, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -183,13 +167,9 @@ func TestJob_Finish(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
-	destDir, err := ioutil.TempDir("", "hornet_test")
-	if err != nil {
-		log.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(destDir)
+	repo := NewSyncedRepository(currDir)
+	defer os.RemoveAll(repo.destPath)
 
-	repo := NewSyncedRepository(currDir, destDir)
 	job, err := NewJob(dirPath, repo, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
