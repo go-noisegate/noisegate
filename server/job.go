@@ -21,17 +21,18 @@ import (
 
 // Job represents the job to test one package.
 type Job struct {
-	ID                  int64
-	ImportPath, DirPath string
-	Status              JobStatus
+	ID      int64
+	DirPath string
+	Status  JobStatus
 	// The path from the shared dir
-	TestBinaryPath, RepoArchivePath string
-	RepoToPackagePath               string
-	CreatedAt, FinishedAt           time.Time
-	DependencyDepth                 int
-	TaskSets                        []*TaskSet
-	Tasks                           []*Task
-	finishedCh                      chan struct{}
+	TestBinaryPath        string
+	Repository            *SyncedRepository
+	RepoToPackagePath     string
+	CreatedAt, FinishedAt time.Time
+	DependencyDepth       int
+	TaskSets              []*TaskSet
+	Tasks                 []*Task
+	finishedCh            chan struct{}
 }
 
 // JobStatus represents the status of the job.
@@ -44,12 +45,25 @@ const (
 )
 
 // NewJob returns the new job.
-func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
-	id := generateID()
+func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (*Job, error) {
+	job := &Job{
+		ID:              generateID(),
+		DirPath:         dirPath,
+		Status:          JobStatusCreated,
+		Repository:      repository,
+		CreatedAt:       time.Now(),
+		DependencyDepth: dependencyDepth,
+		finishedCh:      make(chan struct{}),
+	}
+
+	relPath, err := filepath.Rel(repository.srcPath, dirPath)
+	if err != nil {
+		return nil, err
+	}
+	job.RepoToPackagePath = relPath
+
 	errCh := make(chan error)
 	binaryPathCh := make(chan string, 1) // to avoid go routine leaks
-	archivePathCh := make(chan string, 1)
-	repoToPkgPathCh := make(chan string, 1)
 	funcNamesCh := make(chan []string, 1)
 
 	var wg sync.WaitGroup
@@ -61,7 +75,7 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 			log.Debugf("time to build the test binary: %v\n", time.Since(start))
 		}()
 
-		testBinaryPath, err := buildTestBinary(dirPath, id)
+		testBinaryPath, err := buildTestBinary(dirPath, job.ID)
 		if err == errNoGoTestFiles {
 			err = nil
 			testBinaryPath = ""
@@ -75,13 +89,15 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 		defer wg.Done()
 		start := time.Now()
 		defer func() {
-			log.Debugf("time to create the repository archive: %v\n", time.Since(start))
+			log.Debugf("time to sync the repository: %v\n", time.Since(start))
 		}()
 
-		repoArchivePath, repoToPkgPath, err := archiveRepository(dirPath, id)
+		repository.Lock(job)
+		err := repository.SyncInLock()
+		if err != nil {
+			repository.Unlock()
+		}
 		errCh <- err
-		archivePathCh <- repoArchivePath
-		repoToPkgPathCh <- repoToPkgPath
 	}()
 
 	wg.Add(1)
@@ -97,28 +113,15 @@ func NewJob(importPath, dirPath string, dependencyDepth int) (*Job, error) {
 		close(errCh)
 	}()
 
-	var err error
 	for e := range errCh {
 		err = multierr.Combine(err, e)
 	}
 	if err != nil {
-		// TODO: remove created files
+		// TODO: remove created files and unlock repo.
 		return nil, err
 	}
 
-	job := &Job{
-		ID:                id,
-		ImportPath:        importPath,
-		DirPath:           dirPath,
-		Status:            JobStatusCreated,
-		TestBinaryPath:    <-binaryPathCh,
-		RepoArchivePath:   <-archivePathCh,
-		RepoToPackagePath: <-repoToPkgPathCh,
-		CreatedAt:         time.Now(),
-		DependencyDepth:   dependencyDepth,
-		finishedCh:        make(chan struct{}),
-	}
-
+	job.TestBinaryPath = <-binaryPathCh
 	for _, testFuncName := range <-funcNamesCh {
 		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: job})
 	}
@@ -167,24 +170,6 @@ func buildTestBinary(dirPath string, jobID int64) (string, error) {
 		return "", errNoGoTestFiles
 	}
 	return path, nil
-}
-
-func archiveRepository(dirPath string, jobID int64) (string, string, error) {
-	root := findRepoRoot(dirPath)
-	rel, err := filepath.Rel(root, dirPath)
-	if err != nil {
-		return "", "", err
-	}
-
-	path := filepath.Join("lib", strconv.FormatInt(jobID, 10)+".tar")
-	cmd := exec.Command("tar", "-cf", filepath.Join(sharedDir, path), "--exclude=./.git/", ".")
-	cmd.Dir = root
-	archiveLog, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", "", fmt.Errorf("failed to archive: %w\nlog:\n%s", err, string(archiveLog))
-	}
-
-	return path, rel, nil
 }
 
 var patternTestFuncName = regexp.MustCompile(`(?m)^ *func *(Test[^(]+)`)
@@ -272,10 +257,7 @@ func (j *Job) Finish() {
 		}
 	}
 
-	absPath := filepath.Join(sharedDir, j.RepoArchivePath)
-	if err := os.Remove(absPath); err != nil {
-		log.Debugf("failed to remove the archive %s: %v\n", absPath, err)
-	}
+	j.Repository.Unlock()
 
 	// should not remove task sets' logs here because the client may not read them yet.
 

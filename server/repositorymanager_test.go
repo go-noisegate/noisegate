@@ -12,7 +12,7 @@ import (
 
 func TestRepositoryManager_Watch(t *testing.T) {
 	m := NewRepositoryManager()
-	if err := m.Watch("."); err != nil {
+	if err := m.Watch(".", true); err != nil {
 		t.Fatalf("failed to watch repo: %v", err)
 	}
 
@@ -20,6 +20,7 @@ func TestRepositoryManager_Watch(t *testing.T) {
 	if !ok {
 		t.Fatalf("repo not found")
 	}
+	defer os.RemoveAll(repo.destPath)
 
 	// wait the sync to be finished
 	repo.Lock(nil)
@@ -42,17 +43,42 @@ func TestRepositoryManager_SkipAlreadyWatchedRepo(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	m := NewRepositoryManager()
-	if err := m.Watch("."); err != nil {
+	if err := m.Watch(".", true); err != nil {
 		t.Fatalf("failed to watch repo: %v", err)
 	}
 	repo1st, _ := m.Find(".")
 
-	if err := m.Watch("."); err != nil {
+	if err := m.Watch(".", true); err != nil {
 		t.Fatalf("failed to watch repo: %v", err)
 	}
 	repo2nd, _ := m.Find(".")
 	if repo1st != repo2nd {
 		t.Errorf("repository is updated")
+	}
+}
+
+func TestRepositoryManager_Watch_NotSync(t *testing.T) {
+	m := NewRepositoryManager()
+	if err := m.Watch(".", false); err != nil {
+		t.Fatalf("failed to watch repo: %v", err)
+	}
+
+	repo, ok := m.Find(".")
+	if !ok {
+		t.Fatalf("repo not found")
+	}
+	defer os.RemoveAll(repo.destPath)
+
+	// wait the background go routine to be finished
+	repo.Lock(nil)
+	repo.Unlock()
+
+	if _, err := os.Stat(repo.destPath); os.IsNotExist(err) {
+		t.Errorf("dest path not exist: %s", repo.destPath)
+	}
+	readme := filepath.Join(repo.destPath, "README.md")
+	if _, err := os.Stat(readme); !os.IsNotExist(err) {
+		t.Errorf("file exists: %s", readme)
 	}
 }
 

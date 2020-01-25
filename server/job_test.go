@@ -1,13 +1,10 @@
 package server
 
 import (
-	"archive/tar"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -28,15 +25,23 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewJob(t *testing.T) {
-	importPath := "github.com/ks888/hornet/server/testdata"
-	_, filename, _, _ := runtime.Caller(0)
-	dirPath := filepath.Join(filepath.Dir(filename), "testdata")
-	job, err := NewJob(importPath, dirPath, 1)
+	currDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
+	dirPath := filepath.Join(currDir, "testdata")
+	repoRoot := filepath.Dir(currDir) + string(filepath.Separator)
+
+	destDir, err := ioutil.TempDir("", "hornet_test")
+	if err != nil {
+		log.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(destDir)
+
+	repo := NewSyncedRepository(repoRoot, destDir)
+	job, err := NewJob(dirPath, repo, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
-	}
-	if job.ImportPath != importPath {
-		t.Errorf("wrong import path: %s", job.ImportPath)
 	}
 	if job.ID == 0 {
 		t.Errorf("id is 0")
@@ -50,10 +55,10 @@ func TestNewJob(t *testing.T) {
 	if !strings.HasPrefix(job.TestBinaryPath, "bin/") {
 		t.Errorf("wrong path: %v", job.TestBinaryPath)
 	}
-	if !strings.HasPrefix(job.RepoArchivePath, "lib/") {
-		t.Errorf("wrong path: %v", job.RepoArchivePath)
+	if job.Repository != repo {
+		t.Errorf("wrong repository: %v", job.Repository)
 	}
-	checkArchiveContent(t, filepath.Join(sharedDir, job.RepoArchivePath), "./README.md")
+	checkRepositoryContent(t, job.Repository.destPath, "README.md")
 
 	expectedTasks := []Task{
 		{TestFunction: "TestSum", Job: job},
@@ -70,59 +75,57 @@ func TestNewJob(t *testing.T) {
 	}
 }
 
-func checkArchiveContent(t *testing.T, archivePath, filenameToCheck string) {
-	f, err := os.Open(archivePath)
+func checkRepositoryContent(t *testing.T, repoPath, filenameToCheck string) {
+	fis, err := ioutil.ReadDir(repoPath)
 	if err != nil {
-		t.Fatalf("failed to open %s: %v", archivePath, err)
+		t.Fatalf("failed to read %s: %v", repoPath, err)
 	}
 
-	tarReader := tar.NewReader(f)
-	for {
-		header, err := tarReader.Next()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatalf("failed to check tar contents: %v", err)
-		}
-
-		if header.Name == filenameToCheck {
+	for _, fi := range fis {
+		if fi.Name() == filenameToCheck {
 			return
 		}
 	}
-	t.Errorf("can't find %s in %s", filenameToCheck, archivePath)
+
+	t.Errorf("can't find %s under %s", filenameToCheck, repoPath)
 }
 
 func TestNewJob_InvalidDirPath(t *testing.T) {
-	importPath := "github.com/ks888/hornet/server/testdata"
 	dirPath := "/not/exist"
-	_, err := NewJob(importPath, dirPath, 1)
+	_, err := NewJob(dirPath, NewSyncedRepository("/not", ""), 1)
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
 }
 
 func TestNewJob_UniqueIDCheck(t *testing.T) {
-	importPath := "github.com/ks888/hornet/server/testdata/no_go_files"
-	_, filename, _, _ := runtime.Caller(0)
-	dirPath := filepath.Join(filepath.Dir(filename), "testdata", "no_go_files")
+	currDir, _ := os.Getwd()
+	dirPath := filepath.Join(currDir, "testdata", "no_go_files")
 
-	usedIDs := make(map[int64]struct{})
+	destDir, err := ioutil.TempDir("", "hornet_test")
+	if err != nil {
+		log.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(destDir)
+	repo := NewSyncedRepository(dirPath, destDir)
+
 	ch := make(chan int64)
 	numGoRoutines := 10
 	numIter := 10
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
-				job, err := NewJob(importPath, dirPath, 1)
+				job, err := NewJob(dirPath, repo, 1)
 				if err != nil {
 					panic(err)
 				}
 				ch <- job.ID
+				job.Finish()
 			}
 		}()
 	}
 
+	usedIDs := make(map[int64]struct{})
 	for i := 0; i < numGoRoutines*numIter; i++ {
 		usedID := <-ch
 		if _, ok := usedIDs[usedID]; ok {
@@ -133,11 +136,16 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 }
 
 func TestNewJob_NoGoFiles(t *testing.T) {
-	importPath := "github.com/ks888/hornet/server/testdata/no_go_files"
-	_, filename, _, _ := runtime.Caller(0)
-	dirPath := filepath.Join(filepath.Dir(filename), "testdata", "no_go_files")
+	currDir, _ := os.Getwd()
+	dirPath := filepath.Join(currDir, "testdata", "no_go_files")
 
-	job, err := NewJob(importPath, dirPath, 1)
+	destDir, err := ioutil.TempDir("", "hornet_test")
+	if err != nil {
+		log.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(destDir)
+
+	job, err := NewJob(dirPath, NewSyncedRepository(dirPath, destDir), 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -150,11 +158,16 @@ func TestNewJob_NoGoFiles(t *testing.T) {
 }
 
 func TestNewJob_NoGoTestFiles(t *testing.T) {
-	importPath := "github.com/ks888/hornet/server/testdata/no_go_test_files"
-	_, filename, _, _ := runtime.Caller(0)
-	dirPath := filepath.Join(filepath.Dir(filename), "testdata", "no_go_test_files")
+	currDir, _ := os.Getwd()
+	dirPath := filepath.Join(currDir, "testdata", "no_go_test_files")
 
-	job, err := NewJob(importPath, dirPath, 1)
+	destDir, err := ioutil.TempDir("", "hornet_test")
+	if err != nil {
+		log.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(destDir)
+
+	job, err := NewJob(dirPath, NewSyncedRepository(dirPath, destDir), 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -167,10 +180,17 @@ func TestNewJob_NoGoTestFiles(t *testing.T) {
 }
 
 func TestJob_Finish(t *testing.T) {
-	importPath := "github.com/ks888/hornet/server/testdata"
-	_, filename, _, _ := runtime.Caller(0)
-	dirPath := filepath.Join(filepath.Dir(filename), "testdata")
-	job, err := NewJob(importPath, dirPath, 1)
+	currDir, _ := os.Getwd()
+	dirPath := filepath.Join(currDir, "testdata")
+
+	destDir, err := ioutil.TempDir("", "hornet_test")
+	if err != nil {
+		log.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(destDir)
+
+	repo := NewSyncedRepository(currDir, destDir)
+	job, err := NewJob(dirPath, repo, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -182,9 +202,7 @@ func TestJob_Finish(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(sharedDir, job.TestBinaryPath)); !os.IsNotExist(err) {
 		t.Errorf("test binary still exist: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(sharedDir, job.RepoArchivePath)); !os.IsNotExist(err) {
-		t.Errorf("archive still exist: %v", err)
-	}
+	job.Repository.Lock(nil) // Finish must unlock the repository
 	job.WaitFinished()
 }
 

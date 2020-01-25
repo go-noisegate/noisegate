@@ -23,7 +23,9 @@ func NewRepositoryManager() *RepositoryManager {
 }
 
 // Watch watches the repository to which the specified `path` belongs.
-func (m *RepositoryManager) Watch(path string) error {
+// If `sync` is true, the repository is synced on background (that is, the method doesn't block).
+// No-op if the repository is already watched.
+func (m *RepositoryManager) Watch(path string, sync bool) error {
 	srcPath := m.srcPath(path)
 	destPath := filepath.Join(sharedDir, "src", srcPath)
 
@@ -54,6 +56,9 @@ func (m *RepositoryManager) Watch(path string) error {
 	go func() {
 		defer repo.Unlock()
 
+		if !sync {
+			return
+		}
 		if err := repo.SyncInLock(); err != nil {
 			log.Printf("failed to sync: %v", err)
 		}

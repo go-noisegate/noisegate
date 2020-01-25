@@ -66,7 +66,7 @@ func TestHandleWatch_PathNotFound(t *testing.T) {
 	}
 }
 
-func TestHandleTest_Depth0(t *testing.T) {
+func TestHandleTest_InputIsFile(t *testing.T) {
 	jobManager := NewJobManager()
 	workerManager := &WorkerManager{}
 	server := NewHornetServer("", jobManager, workerManager, NewRepositoryManager())
@@ -76,7 +76,7 @@ func TestHandleTest_Depth0(t *testing.T) {
 		t.Fatalf("failed to get wd: %v", err)
 	}
 	path := filepath.Join(curr, "testdata", "sum.go")
-	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
+	req := httptest.NewRequest("GET", common.TestPath, strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	go func() {
 		executeTaskSet(t, jobManager)
@@ -97,6 +97,34 @@ func TestHandleTest_Depth0(t *testing.T) {
 		t.Errorf("unexpected content: %s", string(out))
 	}
 	matched, _ = regexp.Match(`(?m)^PASS: Job#\d+ \(`+filepath.Dir(path)+`\) `, out)
+	if !matched {
+		t.Errorf("unexpected content: %s", string(out))
+	}
+}
+
+func TestHandleTest_InputIsDir(t *testing.T) {
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", jobManager, workerManager, NewRepositoryManager())
+
+	curr, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
+	path := filepath.Join(curr, "testdata")
+	req := httptest.NewRequest("GET", common.TestPath, strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
+	w := httptest.NewRecorder()
+	go func() {
+		executeTaskSet(t, jobManager)
+	}()
+	server.handleTest(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("unexpected code: %d", w.Code)
+	}
+
+	out, _ := ioutil.ReadAll(w.Body)
+	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+path+`\) `, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}

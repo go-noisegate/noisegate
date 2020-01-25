@@ -27,6 +27,8 @@ func SetUpSharedDir(dir string) {
 	os.Mkdir(filepath.Join(sharedDir, "lib"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "log"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "src"), os.ModePerm)
+
+	log.Debugf("shared dir: %s", sharedDir)
 }
 
 // HornetServer serves the APIs for the cli client.
@@ -62,7 +64,7 @@ func (s HornetServer) Shutdown(ctx context.Context) error {
 }
 
 func (s HornetServer) handleWatch(w http.ResponseWriter, r *http.Request) {
-	var input common.TestRequest
+	var input common.WatchRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -77,7 +79,7 @@ func (s HornetServer) handleWatch(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("watch %s\n", input.Path)
 
-	if err := s.repositoryManager.Watch(input.Path); err != nil {
+	if err := s.repositoryManager.Watch(input.Path, true); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("failed to watch %s: %v", input.Path, err)
 		return
@@ -93,21 +95,31 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := os.Stat(input.Path); os.IsNotExist(err) {
+	fi, err := os.Stat(input.Path)
+	if os.IsNotExist(err) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("the specified path not found\n"))
 		return
 	}
+	pathDir := input.Path
+	if !fi.IsDir() {
+		pathDir = filepath.Dir(input.Path)
+	}
 
 	log.Printf("test %s\n", input.Path)
-	pathDir := filepath.Dir(input.Path)
 
 	getImportGraph := s.asyncBuildImportGraph(pathDir)
 
 	var wg sync.WaitGroup
 	var handleJob func(path string, depth int)
 	handleJob = func(path string, depth int) {
-		job, err := NewJob("", path, depth)
+		if err := s.repositoryManager.Watch(path, false); err != nil {
+			log.Printf("failed to watch the repository %s: %v\n", path, err)
+			return
+		}
+
+		repo, _ := s.repositoryManager.Find(path)
+		job, err := NewJob(path, repo, depth)
 		if err != nil {
 			log.Printf("failed to generate a new job: %v\n", err)
 			return
@@ -119,7 +131,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		importGraph := getImportGraph()
-		for _, inbound := range importGraph.Inbounds[pathDir] {
+		for _, inbound := range importGraph.Inbounds[path] {
 			inbound := inbound
 			wg.Add(1)
 			go func() {
