@@ -108,7 +108,11 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("test %s\n", input.Path)
 
-	getImportGraph := s.asyncBuildImportGraph(pathDir)
+	// disable import graph feature for now
+	// getImportGraph := s.asyncBuildImportGraph(pathDir)
+	getImportGraph := func() *ImportGraph {
+		return &ImportGraph{Root: pathDir, Inbounds: make(map[string][]string)}
+	}
 
 	var wg sync.WaitGroup
 	var handleJob func(path string, depth int)

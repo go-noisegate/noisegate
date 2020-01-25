@@ -130,40 +130,41 @@ func TestHandleTest_InputIsDir(t *testing.T) {
 	}
 }
 
-func TestHandleTest_Depth1(t *testing.T) {
-	jobManager := NewJobManager()
-	workerManager := &WorkerManager{}
-	server := NewHornetServer("", jobManager, workerManager, NewRepositoryManager())
-	server.depthLimit = 1
+// disable import graph feature for now
+// func TestHandleTest_Depth1(t *testing.T) {
+// 	jobManager := NewJobManager()
+// 	workerManager := &WorkerManager{}
+// 	server := NewHornetServer("", jobManager, workerManager, NewRepositoryManager())
+// 	server.depthLimit = 1
 
-	curr, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get wd: %v", err)
-	}
-	// Importgraph builder ignores testdata dir
-	path := filepath.Join(curr, "server.go")
-	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
-	w := httptest.NewRecorder()
-	go func() {
-		executeTaskSet(t, jobManager)
-		executeTaskSet(t, jobManager)
-	}()
-	server.handleTest(w, req)
+// 	curr, err := os.Getwd()
+// 	if err != nil {
+// 		t.Fatalf("failed to get wd: %v", err)
+// 	}
+// 	// Importgraph builder ignores testdata dir
+// 	path := filepath.Join(curr, "server.go")
+// 	req := httptest.NewRequest("GET", "/test", strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
+// 	w := httptest.NewRecorder()
+// 	go func() {
+// 		executeTaskSet(t, jobManager)
+// 		executeTaskSet(t, jobManager)
+// 	}()
+// 	server.handleTest(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("unexpected code: %d", w.Code)
-	}
+// 	if w.Code != http.StatusOK {
+// 		t.Errorf("unexpected code: %d", w.Code)
+// 	}
 
-	out, _ := ioutil.ReadAll(w.Body)
-	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(path)+`\) `, out)
-	if !matched {
-		t.Errorf("unexpected content: %s", string(out))
-	}
-	matched, _ = regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(filepath.Dir(path))+`/cmd/hornetd\) `, out)
-	if !matched {
-		t.Errorf("unexpected content: %s", string(out))
-	}
-}
+// 	out, _ := ioutil.ReadAll(w.Body)
+// 	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(path)+`\) `, out)
+// 	if !matched {
+// 		t.Errorf("unexpected content: %s", string(out))
+// 	}
+// 	matched, _ = regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(filepath.Dir(path))+`/cmd/hornetd\) `, out)
+// 	if !matched {
+// 		t.Errorf("unexpected content: %s", string(out))
+// 	}
+// }
 
 func TestHandleTest_EmptyBody(t *testing.T) {
 	jobManager := NewJobManager()
