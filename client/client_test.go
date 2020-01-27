@@ -48,14 +48,14 @@ func Test_TestAction_BadRequest(t *testing.T) {
 	}
 }
 
-func Test_WatchAction(t *testing.T) {
+func Test_SetupAction(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc(common.WatchPath, func(w http.ResponseWriter, r *http.Request) {})
+	mux.HandleFunc(common.SetupPath, func(w http.ResponseWriter, r *http.Request) {})
 	server := httptest.NewServer(mux)
 
 	testfile := "/path/to/test/file"
-	options := client.WatchOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://")}
-	err := client.WatchAction(context.Background(), testfile, options)
+	options := client.SetupOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://")}
+	err := client.SetupAction(context.Background(), testfile, options)
 	if err != nil {
 		t.Error(err)
 	}

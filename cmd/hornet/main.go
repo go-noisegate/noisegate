@@ -32,9 +32,9 @@ func main() {
 				},
 			},
 			{
-				Name:      "watch",
-				Aliases:   []string{"w"},
-				Usage:     "Watch a repository",
+				Name:      "setup",
+				Aliases:   []string{"s"},
+				Usage:     "Setup a repository",
 				ArgsUsage: "[target file or directory path]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
@@ -44,8 +44,8 @@ func main() {
 					log.EnableDebugLog(c.Bool("debug"))
 
 					filepath := c.Args().First()
-					options := client.WatchOptions{ServerAddr: c.String("addr")}
-					return client.WatchAction(c.Context, filepath, options)
+					options := client.SetupOptions{ServerAddr: c.String("addr")}
+					return client.SetupAction(c.Context, filepath, options)
 				},
 			},
 		},

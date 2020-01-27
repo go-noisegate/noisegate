@@ -45,20 +45,20 @@ func TestAction(ctx context.Context, filepath string, options TestOptions) error
 	return nil
 }
 
-// WatchOptions represents the options which the watch action accepts.
-type WatchOptions struct {
+// SetupOptions represents the options which the setup action accepts.
+type SetupOptions struct {
 	ServerAddr string
 }
 
-// WatchAction watches the repository to which the specified file belongs.
-func WatchAction(ctx context.Context, filepath string, options WatchOptions) error {
-	reqData := common.WatchRequest{Path: filepath}
+// SetupAction sets up the repository to which the specified file belongs.
+func SetupAction(ctx context.Context, filepath string, options SetupOptions) error {
+	reqData := common.SetupRequest{Path: filepath}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("http://%s%s", options.ServerAddr, common.WatchPath)
+	url := fmt.Sprintf("http://%s%s", options.ServerAddr, common.SetupPath)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return err
@@ -69,7 +69,7 @@ func WatchAction(ctx context.Context, filepath string, options WatchOptions) err
 		return err
 	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("failed to watch the repository: %s: %s", resp.Status, string(body))
+		return fmt.Errorf("failed to setup the repository: %s: %s", resp.Status, string(body))
 	}
 
 	return nil

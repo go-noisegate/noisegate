@@ -63,8 +63,8 @@ func (s HornetServer) Shutdown(ctx context.Context) error {
 	return err
 }
 
-func (s HornetServer) handleWatch(w http.ResponseWriter, r *http.Request) {
-	var input common.WatchRequest
+func (s HornetServer) handleSetup(w http.ResponseWriter, r *http.Request) {
+	var input common.SetupRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -77,7 +77,7 @@ func (s HornetServer) handleWatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("watch %s\n", input.Path)
+	log.Printf("setup %s\n", input.Path)
 
 	if err := s.repositoryManager.Watch(input.Path, true); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

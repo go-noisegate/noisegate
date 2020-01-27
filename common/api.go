@@ -11,7 +11,7 @@ const cliAPIPrefix = "/cli"
 // the API pathes
 const (
 	TestPath  = cliAPIPrefix + "/test"
-	WatchPath = cliAPIPrefix + "/watch"
+	SetupPath = cliAPIPrefix + "/setup"
 )
 
 // TestRequest represents the input data to the test API.
@@ -19,8 +19,8 @@ type TestRequest struct {
 	Path string `json:"path"`
 }
 
-// WatchRequest represents the input data to the watch API.
-type WatchRequest struct {
+// SetupRequest represents the input data to the setup API.
+type SetupRequest struct {
 	Path string `json:"path"`
 }
 
