@@ -34,7 +34,7 @@ func main() {
 			{
 				Name:      "setup",
 				Aliases:   []string{"s"},
-				Usage:     "Setup a repository",
+				Usage:     "Sets up the specified file and its repository",
 				ArgsUsage: "[target file or directory path]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {

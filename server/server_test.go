@@ -60,6 +60,19 @@ func TestHandleSetup_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestHandleSetup_RelativePath(t *testing.T) {
+	repoManager := NewRepositoryManager()
+	server := NewHornetServer("", NewJobManager(), &WorkerManager{}, repoManager)
+
+	req := httptest.NewRequest("GET", common.SetupPath, strings.NewReader(`{"path": "rel/path"}`))
+	w := httptest.NewRecorder()
+	server.handleSetup(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("unexpected code: %d", w.Code)
+	}
+}
+
 func TestHandleSetup_PathNotFound(t *testing.T) {
 	repoManager := NewRepositoryManager()
 	server := NewHornetServer("", NewJobManager(), &WorkerManager{}, repoManager)
@@ -145,6 +158,20 @@ func TestHandleTest_EmptyBody(t *testing.T) {
 	server := NewHornetServer("", jobManager, workerManager, NewRepositoryManager())
 
 	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	server.handleTest(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("unexpected code: %d", w.Code)
+	}
+}
+
+func TestHandleTest_RelativePath(t *testing.T) {
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	server := NewHornetServer("", jobManager, workerManager, NewRepositoryManager())
+
+	req := httptest.NewRequest("GET", "/test", strings.NewReader(`{"path": "rel/path"}`))
 	w := httptest.NewRecorder()
 	server.handleTest(w, req)
 

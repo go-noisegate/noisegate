@@ -47,6 +47,7 @@ func NewHornetServer(addr string, jobManager *JobManager, workerManager *WorkerM
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(common.TestPath, s.handleTest)
+	mux.HandleFunc(common.SetupPath, s.handleSetup)
 	mux.HandleFunc(common.NextTaskSetPath, s.handleNextTaskSet)
 	mux.HandleFunc(common.ReportResultPath, s.handleReportResult)
 	s.Server = &http.Server{
@@ -71,6 +72,12 @@ func (s HornetServer) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !filepath.IsAbs(input.Path) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("the path must be abs\n"))
+		return
+	}
+
 	if _, err := os.Stat(input.Path); os.IsNotExist(err) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("the specified path not found\n"))
@@ -92,6 +99,12 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if !filepath.IsAbs(input.Path) {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("the path must be abs\n"))
 		return
 	}
 

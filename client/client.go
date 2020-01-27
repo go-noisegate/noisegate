@@ -8,6 +8,8 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/ks888/hornet/common"
 )
@@ -19,8 +21,17 @@ type TestOptions struct {
 }
 
 // TestAction runs the test of the packages related to the specified file.
-func TestAction(ctx context.Context, filepath string, options TestOptions) error {
-	reqData := common.TestRequest{Path: filepath}
+// If the path is relative, it assumes it's the relative path from the current working directory.
+func TestAction(ctx context.Context, path string, options TestOptions) error {
+	if !filepath.IsAbs(path) {
+		curr, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to find the abs path: %w", err)
+		}
+		path = filepath.Join(curr, path)
+	}
+
+	reqData := common.TestRequest{Path: path}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err
@@ -51,8 +62,17 @@ type SetupOptions struct {
 }
 
 // SetupAction sets up the repository to which the specified file belongs.
-func SetupAction(ctx context.Context, filepath string, options SetupOptions) error {
-	reqData := common.SetupRequest{Path: filepath}
+// If the path is relative, it assumes it's the relative path from the current working directory.
+func SetupAction(ctx context.Context, path string, options SetupOptions) error {
+	if !filepath.IsAbs(path) {
+		curr, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("failed to find the abs path: %w", err)
+		}
+		path = filepath.Join(curr, path)
+	}
+
+	reqData := common.SetupRequest{Path: path}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err
