@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/ks888/hornet/common"
@@ -99,6 +98,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid request body\n"))
 		return
 	}
 
@@ -121,63 +121,45 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("test %s\n", input.Path)
 
-	// disable import graph feature for now
-	// getImportGraph := s.asyncBuildImportGraph(pathDir)
-	getImportGraph := func() *ImportGraph {
-		return &ImportGraph{Root: pathDir, Inbounds: make(map[string][]string)}
+	if err := s.repositoryManager.Watch(pathDir, false); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "failed to watch the repository %s: %v\n", pathDir, err)
+		return
 	}
 
-	var wg sync.WaitGroup
-	var handleJob func(path string, depth int)
-	handleJob = func(path string, depth int) {
-		if err := s.repositoryManager.Watch(path, false); err != nil {
-			fmt.Fprintf(w, "failed to watch the repository %s: %v\n", path, err)
-			return
-		}
-
-		repo, _ := s.repositoryManager.Find(path)
-		job, err := NewJob(path, repo, depth)
-		if err != nil {
-			fmt.Fprintf(w, "failed to generate a new job: %v\n", err)
-			return
-		}
-		s.jobManager.Partition(job, s.workerManager.NumWorkers())
-		s.runAndWaitJob(w, job)
-
-		if job.Status != JobStatusSuccessful || depth == s.depthLimit {
-			return
-		}
-
-		importGraph := getImportGraph()
-		for _, inbound := range importGraph.Inbounds[path] {
-			inbound := inbound
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				handleJob(inbound, depth+1)
-			}()
-		}
+	repo, _ := s.repositoryManager.Find(pathDir)
+	job, err := NewJob(pathDir, repo, 0)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "failed to generate a new job: %v\n", err)
+		return
 	}
 
-	handleJob(pathDir, 0)
-	wg.Wait()
+	if err := s.jobManager.Partition(job, s.workerManager.NumWorkers()); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "failed to divide the tests: %v\n", err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	s.runAndWaitJob(w, job)
 }
 
 func (s HornetServer) runAndWaitJob(w http.ResponseWriter, job *Job) {
 	log.Debugf("add the job id %d\n", job.ID)
 	s.jobManager.AddJob(job)
 
-	var wg sync.WaitGroup
-	for _, taskSet := range job.TaskSets {
-		wg.Add(1)
-		go func(taskSet *TaskSet) {
-			defer wg.Done()
-			s.writeTaskSetLog(w, job, taskSet)
-			// Note that the data is not flushed if \n is not appended.
-			w.(http.Flusher).Flush()
-		}(taskSet)
+	ch := make(chan int)
+	for i := range job.TaskSets {
+		go func(i int) {
+			job.TaskSets[i].WaitFinished()
+			ch <- i
+		}(i)
 	}
-	wg.Wait()
+
+	for range job.TaskSets {
+		i := <-ch
+		s.writeTaskSetLog(w, job, job.TaskSets[i])
+	}
 
 	job.WaitFinished()
 
@@ -211,13 +193,10 @@ func (s HornetServer) asyncBuildImportGraph(path string) (getImportGraph func() 
 }
 
 func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {
-	taskSet.WaitFinished()
-
 	result := "FAIL"
 	if taskSet.Status == TaskSetStatusSuccessful {
 		result = "PASS"
 	}
-	// TODO: protect the writer.
 	elapsedTime := taskSet.FinishedAt.Sub(taskSet.StartedAt)
 	fmt.Fprintf(w, "%s: Job#%d/TaskSet#%d (%s) (%v)\n", result, job.ID, taskSet.ID, job.DirPath, elapsedTime)
 	content, err := ioutil.ReadFile(filepath.Join(sharedDir, taskSet.LogPath))

@@ -88,7 +88,7 @@ func TestHandleSetup_PathNotFound(t *testing.T) {
 
 func TestHandleTest_InputIsFile(t *testing.T) {
 	jobManager := NewJobManager()
-	workerManager := &WorkerManager{}
+	workerManager := &WorkerManager{Workers: make([]Worker, 1)}
 	repoManager := NewRepositoryManager()
 	server := NewHornetServer("", jobManager, workerManager, repoManager)
 
@@ -125,7 +125,7 @@ func TestHandleTest_InputIsFile(t *testing.T) {
 
 func TestHandleTest_InputIsDir(t *testing.T) {
 	jobManager := NewJobManager()
-	workerManager := &WorkerManager{}
+	workerManager := &WorkerManager{Workers: make([]Worker, 1)}
 	repoManager := NewRepositoryManager()
 	server := NewHornetServer("", jobManager, workerManager, repoManager)
 
@@ -150,6 +150,29 @@ func TestHandleTest_InputIsDir(t *testing.T) {
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}
+}
+
+func TestHandleTest_NoWorkers(t *testing.T) {
+	jobManager := NewJobManager()
+	workerManager := &WorkerManager{}
+	repoManager := NewRepositoryManager()
+	server := NewHornetServer("", jobManager, workerManager, repoManager)
+
+	curr, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get wd: %v", err)
+	}
+	path := filepath.Join(curr, "testdata", "sum.go")
+	req := httptest.NewRequest("GET", common.TestPath, strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
+	w := httptest.NewRecorder()
+	server.handleTest(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("unexpected code: %d", w.Code)
+	}
+	defer func() {
+		repo, _ := repoManager.Find(path)
+		os.RemoveAll(repo.destPath)
+	}()
 }
 
 func TestHandleTest_EmptyBody(t *testing.T) {

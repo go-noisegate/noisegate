@@ -9,9 +9,21 @@ func TestJobManager_Partition(t *testing.T) {
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job}, &Task{TestFunction: "TestFunc2", Job: job})
 
 	manager := NewJobManager()
-	manager.Partition(job, 2)
+	if err := manager.Partition(job, 2); err != nil {
+		t.Fatal(err)
+	}
 	if len(job.TaskSets) != 2 {
 		t.Errorf("wrong number of task sets: %d", len(job.TaskSets))
+	}
+}
+
+func TestJobManager_Partition_NoPartitions(t *testing.T) {
+	job := &Job{ID: 1}
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job}, &Task{TestFunction: "TestFunc2", Job: job})
+
+	manager := NewJobManager()
+	if err := manager.Partition(job, 0); err == nil {
+		t.Fatal("nil error")
 	}
 }
 

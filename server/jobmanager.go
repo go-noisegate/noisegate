@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
@@ -50,8 +51,13 @@ func (m *JobManager) NextTaskSet(groupName string, workerID int) (job *Job, task
 }
 
 // Partition partitions the job into the task sets.
-func (m *JobManager) Partition(job *Job, numPartitions int) {
+func (m *JobManager) Partition(job *Job, numPartitions int) error {
+	if numPartitions == 0 && len(job.Tasks) != 0 {
+		return errors.New("the number of partitions is 0")
+	}
+
 	job.TaskSets = m.partitioner.Partition(job, numPartitions)
+	return nil
 }
 
 // AddJob partitions the job into the task sets and adds them to the scheduler.

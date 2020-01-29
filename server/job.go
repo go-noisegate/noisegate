@@ -87,12 +87,13 @@ func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		repository.Lock(job)
+
 		start := time.Now()
 		defer func() {
 			log.Debugf("time to sync the repository: %v\n", time.Since(start))
 		}()
 
-		repository.Lock(job)
 		err := repository.SyncInLock()
 		if err != nil {
 			repository.Unlock()
