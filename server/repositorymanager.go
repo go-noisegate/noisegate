@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ks888/hornet/common/log"
 )
@@ -55,6 +56,12 @@ func (m *RepositoryManager) Watch(path string, sync bool) error {
 		if !sync {
 			return
 		}
+
+		start := time.Now()
+		defer func() {
+			log.Debugf("time to sync the repository %s: %v\n", srcPath, time.Since(start))
+		}()
+
 		if err := repo.SyncInLock(); err != nil {
 			log.Printf("failed to sync: %v", err)
 		}

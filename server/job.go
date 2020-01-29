@@ -152,6 +152,7 @@ func findRepoRoot(path string) string {
 var errNoGoTestFiles = errors.New("no go test files (though there may be go files)")
 
 var patternNoTestFiles = regexp.MustCompile(`(?m)\s+\[no test files\]$`)
+var patternNoGoFiles = regexp.MustCompile(`(?m)can't load package: package .+: no Go files in `)
 
 func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	path := filepath.Join("bin", strconv.FormatInt(jobID, 10))
@@ -160,13 +161,13 @@ func buildTestBinary(dirPath string, jobID int64) (string, error) {
 	cmd.Dir = dirPath
 	buildLog, err := cmd.CombinedOutput()
 	if err != nil {
-		if strings.HasPrefix(string(buildLog), "can't load package: package .: no Go files in ") {
+		if patternNoGoFiles.Match(buildLog) {
 			return "", errNoGoTestFiles
 		}
 		return "", fmt.Errorf("failed to build: %w\nbuild log:\n%s", err, string(buildLog))
 	}
 
-	if matched := patternNoTestFiles.Match(buildLog); matched {
+	if patternNoTestFiles.Match(buildLog) {
 		return "", errNoGoTestFiles
 	}
 	return path, nil
@@ -390,6 +391,7 @@ func (p LPTPartitioner) Partition(job *Job, numPartitions int) []*TaskSet {
 	}
 
 	p.distributeTasks(taskSets, noProfileTasks)
+	p.sortTasksByName(taskSets)
 	return taskSets
 }
 
@@ -416,5 +418,11 @@ func (p LPTPartitioner) distributeTasks(taskSets []*TaskSet, tasks []*Task) {
 		if curr == len(taskSets) {
 			curr = 0
 		}
+	}
+}
+
+func (p LPTPartitioner) sortTasksByName(taskSets []*TaskSet) {
+	for _, ts := range taskSets {
+		sort.Slice(ts.Tasks, func(i, j int) bool { return ts.Tasks[i].TestFunction < ts.Tasks[j].TestFunction })
 	}
 }

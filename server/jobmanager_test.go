@@ -4,16 +4,32 @@ import (
 	"testing"
 )
 
+func TestJobManager_Partition(t *testing.T) {
+	job := &Job{ID: 1}
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job}, &Task{TestFunction: "TestFunc2", Job: job})
+
+	manager := NewJobManager()
+	manager.Partition(job, 2)
+	if len(job.TaskSets) != 2 {
+		t.Errorf("wrong number of task sets: %d", len(job.TaskSets))
+	}
+}
+
 func TestJobManager_AddJob(t *testing.T) {
-	job := &Job{ID: 1, finishedCh: make(chan struct{})}
-	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job})
+	job := &Job{
+		ID:         1,
+		finishedCh: make(chan struct{}),
+	}
+	numTaskSets := 2
+	for i := 0; i < numTaskSets; i++ {
+		ts := NewTaskSet(i, job)
+		ts.Tasks = []*Task{&Task{}}
+		job.TaskSets = append(job.TaskSets, ts)
+	}
 
 	manager := NewJobManager()
 	manager.AddJob(job)
-	if len(job.TaskSets) != 1 {
-		t.Errorf("wrong number of task sets: %d", len(job.TaskSets))
-	}
-	if manager.scheduler.Size() != 1 {
+	if manager.scheduler.Size() != numTaskSets {
 		t.Errorf("wrong size: %d", manager.scheduler.Size())
 	}
 	if _, ok := manager.jobs[job.ID]; !ok {
@@ -26,6 +42,9 @@ func TestJobManager_AddJob_NoTasks(t *testing.T) {
 
 	manager := NewJobManager()
 	manager.AddJob(job)
+	if manager.scheduler.Size() != 0 {
+		t.Errorf("wrong size: %d", manager.scheduler.Size())
+	}
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
 	}

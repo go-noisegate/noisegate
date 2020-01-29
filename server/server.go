@@ -131,16 +131,17 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	var handleJob func(path string, depth int)
 	handleJob = func(path string, depth int) {
 		if err := s.repositoryManager.Watch(path, false); err != nil {
-			log.Printf("failed to watch the repository %s: %v\n", path, err)
+			fmt.Fprintf(w, "failed to watch the repository %s: %v\n", path, err)
 			return
 		}
 
 		repo, _ := s.repositoryManager.Find(path)
 		job, err := NewJob(path, repo, depth)
 		if err != nil {
-			log.Printf("failed to generate a new job: %v\n", err)
+			fmt.Fprintf(w, "failed to generate a new job: %v\n", err)
 			return
 		}
+		s.jobManager.Partition(job, s.workerManager.NumWorkers())
 		s.runAndWaitJob(w, job)
 
 		if job.Status != JobStatusSuccessful || depth == s.depthLimit {

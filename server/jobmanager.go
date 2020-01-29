@@ -49,9 +49,13 @@ func (m *JobManager) NextTaskSet(groupName string, workerID int) (job *Job, task
 	return
 }
 
+// Partition partitions the job into the task sets.
+func (m *JobManager) Partition(job *Job, numPartitions int) {
+	job.TaskSets = m.partitioner.Partition(job, numPartitions)
+}
+
 // AddJob partitions the job into the task sets and adds them to the scheduler.
 func (m *JobManager) AddJob(job *Job) {
-	job.TaskSets = m.partitioner.Partition(job, 1)
 	log.Debugf("add the %d task set(s)\n", len(job.TaskSets))
 	for _, taskSet := range job.TaskSets {
 		if len(taskSet.Tasks) == 0 {

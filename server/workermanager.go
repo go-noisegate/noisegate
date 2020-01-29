@@ -104,6 +104,11 @@ func (m *WorkerManager) RemoveWorkers() {
 	}
 }
 
+// NumWorkers returns the number of workers.
+func (m *WorkerManager) NumWorkers() int {
+	return len(m.Workers)
+}
+
 // Worker represents one worker.
 type Worker struct {
 	// This id is unique only among the worker group.
