@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"time"
 
 	"github.com/ks888/hornet/common/log"
 	"github.com/ks888/hornet/server"
@@ -108,8 +109,10 @@ func runServer(addr string, opt workerOptions) error {
 		<-sigCh
 
 		log.Println("shut down")
-		if err := server.Shutdown(context.Background()); err != nil {
-			log.Printf("failed to shutdown the server: %v", err)
+		const timeout = 3 * time.Second
+		ctx, _ := context.WithTimeout(context.Background(), timeout)
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("shutdown error: %v", err)
 		}
 		close(shutdownDoneCh)
 	}()

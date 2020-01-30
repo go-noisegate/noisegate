@@ -163,6 +163,22 @@ func TestNewJob_NoGoTestFiles(t *testing.T) {
 	}
 }
 
+func TestNewJob_BuildError(t *testing.T) {
+	currDir, _ := os.Getwd()
+	dirPath := filepath.Join(currDir, "testdata", "build_error")
+
+	repo := NewSyncedRepository(dirPath)
+	defer os.RemoveAll(repo.destPath)
+
+	_, err := NewJob(dirPath, repo, 1)
+	if err == nil {
+		t.Fatalf("nil error")
+	}
+	// repo must be unlocked here.
+	repo.Lock(nil)
+	repo.Unlock()
+}
+
 func TestJob_Finish(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")

@@ -21,6 +21,13 @@ func Debugf(format string, v ...interface{}) {
 	}
 }
 
+// Debug is the wrapper of the standard log.Debug, but printed only when the debug log is enabled.
+func Debug(v ...interface{}) {
+	if debugLogEnabled {
+		log.Print(v...)
+	}
+}
+
 // Fatal is the wrapper of the standard log.Fatal.
 func Fatal(v ...interface{}) {
 	log.Fatal(v...)

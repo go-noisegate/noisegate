@@ -58,9 +58,8 @@ func NewHornetServer(addr string, jobManager *JobManager, workerManager *WorkerM
 
 // Shutdown shutdowns the http server and workers.
 func (s HornetServer) Shutdown(ctx context.Context) error {
-	err := s.Server.Shutdown(ctx)
-	s.workerManager.RemoveWorkers() // not return error
-	return err
+	s.workerManager.RemoveWorkers()
+	return s.Server.Shutdown(ctx)
 }
 
 func (s HornetServer) handleSetup(w http.ResponseWriter, r *http.Request) {
@@ -131,13 +130,17 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	job, err := NewJob(pathDir, repo, 0)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "failed to generate a new job: %v\n", err)
+		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
+		fmt.Fprint(w, msg)
+		log.Debug(msg)
 		return
 	}
 
 	if err := s.jobManager.Partition(job, s.workerManager.NumWorkers()); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "failed to divide the tests: %v\n", err)
+		msg := fmt.Sprintf("failed to divide the tests: %v\n", err)
+		fmt.Fprint(w, msg)
+		log.Debug(msg)
 		return
 	}
 	w.WriteHeader(http.StatusOK)

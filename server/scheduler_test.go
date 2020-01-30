@@ -65,3 +65,34 @@ func TestScheduler_TooLargeDepth(t *testing.T) {
 		t.Errorf("error is not returned")
 	}
 }
+
+func TestScheduler_Concurrent(t *testing.T) {
+	s := taskSetScheduler{}
+	numGoroutines := 10
+	numIt := 10
+	for i := 0; i < numGoroutines*numIt; i++ {
+		s.Add(&TaskSet{ID: i}, 0)
+	}
+
+	ch := make(chan int)
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			for j := 0; j < numIt; j++ {
+				next, err := s.Next()
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				ch <- next.ID
+			}
+		}()
+	}
+
+	m := make(map[int]struct{})
+	for i := 0; i < numGoroutines*numIt; i++ {
+		id := <-ch
+		if _, ok := m[id]; ok {
+			t.Errorf("duplicate id: %d", id)
+		}
+		m[id] = struct{}{}
+	}
+}

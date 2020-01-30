@@ -45,6 +45,7 @@ const (
 )
 
 // NewJob returns the new job.
+// When the job is created successfully, the repository is locked.
 func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (*Job, error) {
 	job := &Job{
 		ID:              generateID(),
@@ -94,11 +95,7 @@ func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (
 			log.Debugf("time to sync the repository: %v\n", time.Since(start))
 		}()
 
-		err := repository.SyncInLock()
-		if err != nil {
-			repository.Unlock()
-		}
-		errCh <- err
+		errCh <- repository.SyncInLock()
 	}()
 
 	wg.Add(1)
@@ -117,15 +114,17 @@ func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (
 	for e := range errCh {
 		err = multierr.Combine(err, e)
 	}
-	if err != nil {
-		// TODO: remove created files and unlock repo.
-		return nil, err
-	}
-
+	// assumes the go routines send the data anyway
 	job.TestBinaryPath = <-binaryPathCh
 	for _, testFuncName := range <-funcNamesCh {
 		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: job})
 	}
+
+	if err != nil {
+		job.clean()
+		return nil, err
+	}
+
 	return job, nil
 }
 
@@ -252,6 +251,12 @@ func (j *Job) Finish() {
 	}
 	j.FinishedAt = time.Now()
 
+	j.clean()
+
+	close(j.finishedCh)
+}
+
+func (j *Job) clean() {
 	if j.TestBinaryPath != "" {
 		absPath := filepath.Join(sharedDir, j.TestBinaryPath)
 		if err := os.Remove(absPath); err != nil {
@@ -262,8 +267,6 @@ func (j *Job) Finish() {
 	j.Repository.Unlock()
 
 	// should not remove task sets' logs here because the client may not read them yet.
-
-	close(j.finishedCh)
 }
 
 // WaitFinished waits until the job finished.

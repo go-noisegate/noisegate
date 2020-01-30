@@ -33,18 +33,12 @@ func NewJobManager() *JobManager {
 
 // NextTaskSet returns the runnable task set.
 func (m *JobManager) NextTaskSet(groupName string, workerID int) (job *Job, taskSet *TaskSet, err error) {
-	for {
-		taskSet, err = m.scheduler.Next()
-		if err != nil {
-			return
-		}
-
-		if len(taskSet.Tasks) != 0 {
-			job = taskSet.Tasks[0].Job
-			break
-		}
-		log.Printf("the task set %d has no tasks", taskSet.ID)
+	taskSet, err = m.scheduler.Next()
+	if err != nil {
+		return
 	}
+	// assumes this task set has at least one task
+	job = taskSet.Tasks[0].Job
 
 	taskSet.Start(groupName, workerID)
 	return
