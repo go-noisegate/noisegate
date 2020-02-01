@@ -36,13 +36,19 @@ type HornetServer struct {
 	jobManager        *JobManager
 	workerManager     *WorkerManager
 	repositoryManager *RepositoryManager
+	packageManager    *PackageManager
 	depthLimit        int
 }
 
 // NewHornetServer returns the new hornet server.
 // We can use only one server instance in the process even if the address is different.
-func NewHornetServer(addr string, jobManager *JobManager, workerManager *WorkerManager, repositoryManager *RepositoryManager) HornetServer {
-	s := HornetServer{jobManager: jobManager, workerManager: workerManager, repositoryManager: repositoryManager}
+func NewHornetServer(addr string, workerManager *WorkerManager) HornetServer {
+	s := HornetServer{
+		jobManager:        NewJobManager(),
+		workerManager:     workerManager,
+		repositoryManager: NewRepositoryManager(),
+		packageManager:    NewPackageManager(),
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(common.TestPath, s.handleTest)
@@ -89,7 +95,27 @@ func (s HornetServer) handleSetup(w http.ResponseWriter, r *http.Request) {
 		log.Printf("failed to watch %s: %v", input.Path, err)
 		return
 	}
+
+	if err := s.prebuild(input.Path); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Print(err)
+		return
+	}
 	w.Write([]byte("accepted\n"))
+}
+
+func (s HornetServer) prebuild(path string) error {
+	if err := s.packageManager.Watch(path); err != nil {
+		return fmt.Errorf("failed to watch %s: %v", path, err)
+	}
+
+	go func() {
+		pkg, _ := s.packageManager.Find(path)
+		if err := pkg.Prebuild(); err != nil {
+			log.Printf("failed to prebuild: %v", err)
+		}
+	}()
+	return nil
 }
 
 func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {

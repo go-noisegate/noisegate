@@ -47,3 +47,8 @@ func Printf(format string, v ...interface{}) {
 func Println(v ...interface{}) {
 	log.Println(v...)
 }
+
+// Print is the wrapper of the standard log.Print.
+func Print(v ...interface{}) {
+	log.Print(v...)
+}

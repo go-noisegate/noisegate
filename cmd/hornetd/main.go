@@ -90,7 +90,6 @@ func runServer(addr string, opt workerOptions) error {
 	defer os.RemoveAll(sharedDir)
 	server.SetUpSharedDir(sharedDir)
 
-	jobManager := server.NewJobManager()
 	workerManager := &server.WorkerManager{ServerAddress: opt.addrFromContainer, WorkerBinPath: opt.workerPath}
 	// TODO: remove workers if the process exits here (or always remove old workers here anyway?)
 	log.Printf("start %d workers\n", opt.numWorkers)
@@ -99,9 +98,8 @@ func runServer(addr string, opt workerOptions) error {
 			return fmt.Errorf("failed to add the worker #%d: %w", i, err)
 		}
 	}
-	repositoryManager := server.NewRepositoryManager()
 
-	server := server.NewHornetServer(addr, jobManager, workerManager, repositoryManager)
+	server := server.NewHornetServer(addr, workerManager)
 	shutdownDoneCh := make(chan struct{})
 	go func() {
 		sigCh := make(chan os.Signal, 1)

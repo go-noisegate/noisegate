@@ -124,7 +124,7 @@ func (r *SyncedRepository) SyncInLock() error {
 	}
 
 	// The quick experiment using the 200MB repository showed the `-z` option is not necessary.
-	cmd := exec.Command("rsync", "-a", "--delete", "--filter=':- .gitignore'", r.srcPath, r.destPath)
+	cmd := exec.Command("rsync", "-a", "--delete", "--filter=:- .gitignore", r.srcPath, r.destPath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to sync dir: %v\nlog:\n%s", err, string(out))
