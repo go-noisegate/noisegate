@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/ks888/hornet/common/log"
@@ -17,6 +18,7 @@ type JobManager struct {
 	profiler    *SimpleProfiler
 	partitioner LPTPartitioner
 	jobs        map[int64]*Job
+	mtx         sync.Mutex // protect `jobs`
 }
 
 // NewJobManager returns the new job manager.
@@ -74,14 +76,17 @@ func (m *JobManager) AddJob(job *Job) {
 		job.Finish()
 		return
 	}
+
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 	m.jobs[job.ID] = job
 }
 
 // ReportResult reports the result and updates the statuses.
 func (m *JobManager) ReportResult(jobID int64, taskSetID int, successful bool) error {
-	job, ok := m.jobs[jobID]
-	if !ok {
-		return fmt.Errorf("failed to find the job %d", jobID)
+	job, err := m.Find(jobID)
+	if err != nil {
+		return err
 	}
 
 	taskSet := job.TaskSets[taskSetID]
@@ -99,11 +104,25 @@ func (m *JobManager) ReportResult(jobID int64, taskSetID int, successful bool) e
 
 	taskSet.Finish(successful)
 
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
 	if job.CanFinish() {
 		job.Finish()
 		delete(m.jobs, jobID)
 	}
 	return nil
+}
+
+// ReportResult reports the result and updates the statuses.
+func (m *JobManager) Find(jobID int64) (*Job, error) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	job, ok := m.jobs[jobID]
+	if !ok {
+		return nil, fmt.Errorf("failed to find the job %d", jobID)
+	}
+	return job, nil
 }
 
 type rawProfile struct {

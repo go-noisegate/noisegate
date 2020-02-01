@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/ks888/hornet/common/log"
 )
@@ -20,11 +21,15 @@ type WorkerManager struct {
 	ServerAddress string // the hornetd server address usable inside container
 	WorkerBinPath string // if empty, search the PATH directories
 	Workers       []Worker
+	mtx           sync.Mutex
 }
 
 // AddWorker starts a new worker. `host` specifies daemon socket(s) to connect to. If `host` is empty,
 // the default docker daemon is used.
 func (m *WorkerManager) AddWorker(host, image string) error {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
 	workerBinPath, err := m.findBinPath()
 	if err != nil {
 		return fmt.Errorf("failed to find the %s command: %w", workerBinName, err)
@@ -87,6 +92,9 @@ func (m *WorkerManager) findBinPath() (string, error) {
 
 // RemoveWorkers stops and removes all the worker containers.
 func (m *WorkerManager) RemoveWorkers() {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
 	for _, w := range m.Workers {
 		for _, dockerCmd := range []string{"stop", "rm"} {
 			var args []string
@@ -106,6 +114,9 @@ func (m *WorkerManager) RemoveWorkers() {
 
 // NumWorkers returns the number of workers.
 func (m *WorkerManager) NumWorkers() int {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
 	return len(m.Workers)
 }
 
