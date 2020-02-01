@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sync"
 
 	"github.com/ks888/hornet/common/log"
@@ -84,10 +85,23 @@ func (p *Package) Prebuild() error {
 	return p.buildContext(ctx, "/dev/null")
 }
 
-// Prebuild builds the package.
+// Build builds the package. Prebuild process is killed if exists.
 func (p *Package) Build(artifactPath string) error {
+	setup := func() {
+		p.mtx.Lock()
+		defer p.mtx.Unlock()
+
+		if p.cancelFunc != nil {
+			p.cancelFunc()
+		}
+		p.cancelFunc = nil
+	}
+	setup()
 	return p.buildContext(context.Background(), artifactPath)
 }
+
+var patternNoTestFiles = regexp.MustCompile(`(?m)\s+\[no test files\]$`)
+var patternNoGoFiles = regexp.MustCompile(`(?m)can't load package: package .+: no Go files in `)
 
 func (p *Package) buildContext(ctx context.Context, artifactPath string) error {
 	cmd := exec.CommandContext(ctx, "go", "test", "-c", "-o", artifactPath, ".")

@@ -59,11 +59,11 @@ func (m *RepositoryManager) Watch(path string, sync bool) error {
 
 		start := time.Now()
 		defer func() {
-			log.Debugf("time to sync the repository %s: %v\n", srcPath, time.Since(start))
+			log.Debugf("presync time: %v\n", time.Since(start))
 		}()
 
 		if err := repo.SyncInLock(); err != nil {
-			log.Printf("failed to sync: %v", err)
+			log.Debugf("failed to sync: %v", err)
 		}
 	}()
 	return nil

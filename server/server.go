@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/build"
 	"io"
@@ -110,10 +111,16 @@ func (s HornetServer) prebuild(path string) error {
 	}
 
 	go func() {
+		start := time.Now()
+
 		pkg, _ := s.packageManager.Find(path)
 		if err := pkg.Prebuild(); err != nil {
-			log.Printf("failed to prebuild: %v", err)
+			if !errors.Is(err, context.Canceled) {
+				log.Debugf("failed to prebuild: %v", err)
+			}
+			return
 		}
+		log.Debugf("prebuild time: %v\n", time.Since(start))
 	}()
 	return nil
 }
@@ -151,9 +158,16 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "failed to watch the repository %s: %v\n", pathDir, err)
 		return
 	}
-
 	repo, _ := s.repositoryManager.Find(pathDir)
-	job, err := NewJob(pathDir, repo, 0)
+
+	if err := s.packageManager.Watch(pathDir); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "failed to watch the package %s: %v\n", pathDir, err)
+		return
+	}
+	pkg, _ := s.packageManager.Find(pathDir)
+
+	job, err := NewJob(repo, pkg, 0)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)

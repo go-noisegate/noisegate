@@ -24,6 +24,7 @@ type Job struct {
 	ID      int64
 	DirPath string
 	Status  JobStatus
+	Package *Package
 	// The path from the shared dir
 	TestBinaryPath        string
 	Repository            *SyncedRepository
@@ -46,10 +47,11 @@ const (
 
 // NewJob returns the new job.
 // When the job is created successfully, the repository is locked.
-func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (*Job, error) {
+func NewJob(repository *SyncedRepository, pkg *Package, dependencyDepth int) (*Job, error) {
 	job := &Job{
 		ID:              generateID(),
-		DirPath:         dirPath,
+		DirPath:         pkg.path,
+		Package:         pkg,
 		Status:          JobStatusCreated,
 		Repository:      repository,
 		CreatedAt:       time.Now(),
@@ -57,7 +59,7 @@ func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (
 		finishedCh:      make(chan struct{}),
 	}
 
-	relPath, err := filepath.Rel(repository.srcPath, dirPath)
+	relPath, err := filepath.Rel(repository.srcPath, pkg.path)
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +75,15 @@ func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (
 		defer wg.Done()
 		start := time.Now()
 		defer func() {
-			log.Debugf("time to build the test binary: %v\n", time.Since(start))
+			log.Debugf("build time: %v\n", time.Since(start))
 		}()
 
-		testBinaryPath, err := buildTestBinary(dirPath, job.ID)
-		if err == errNoGoTestFiles {
-			err = nil
+		testBinaryPath := filepath.Join("bin", strconv.FormatInt(job.ID, 10))
+		err := pkg.Build(filepath.Join(sharedDir, testBinaryPath))
+		if err != nil {
+			if err == errNoGoTestFiles {
+				err = nil
+			}
 			testBinaryPath = ""
 		}
 		errCh <- err
@@ -92,7 +97,7 @@ func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (
 
 		start := time.Now()
 		defer func() {
-			log.Debugf("time to sync the repository: %v\n", time.Since(start))
+			log.Debugf("sync time: %v\n", time.Since(start))
 		}()
 
 		errCh <- repository.SyncInLock()
@@ -101,7 +106,7 @@ func NewJob(dirPath string, repository *SyncedRepository, dependencyDepth int) (
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		testFuncNames, err := retrieveTestFuncNames(dirPath)
+		testFuncNames, err := retrieveTestFuncNames(pkg.path)
 		errCh <- err
 		funcNamesCh <- testFuncNames
 	}()
@@ -151,28 +156,6 @@ func findRepoRoot(path string) string {
 
 var errNoGoTestFiles = errors.New("no go test files (though there may be go files)")
 
-var patternNoTestFiles = regexp.MustCompile(`(?m)\s+\[no test files\]$`)
-var patternNoGoFiles = regexp.MustCompile(`(?m)can't load package: package .+: no Go files in `)
-
-func buildTestBinary(dirPath string, jobID int64) (string, error) {
-	path := filepath.Join("bin", strconv.FormatInt(jobID, 10))
-	cmd := exec.Command("go", "test", "-c", "-o", filepath.Join(sharedDir, path), ".")
-	cmd.Env = append(os.Environ(), "GOOS=linux")
-	cmd.Dir = dirPath
-	buildLog, err := cmd.CombinedOutput()
-	if err != nil {
-		if patternNoGoFiles.Match(buildLog) {
-			return "", errNoGoTestFiles
-		}
-		return "", fmt.Errorf("failed to build: %w\nbuild log:\n%s", err, string(buildLog))
-	}
-
-	if patternNoTestFiles.Match(buildLog) {
-		return "", errNoGoTestFiles
-	}
-	return path, nil
-}
-
 var patternTestFuncName = regexp.MustCompile(`(?m)^ *func *(Test[^(]+)`)
 
 func retrieveTestFuncNames(dirPath string) ([]string, error) {
@@ -205,6 +188,9 @@ func retrieveTestFuncNames(dirPath string) ([]string, error) {
 
 		matches := patternTestFuncName.FindAllStringSubmatch(string(content), -1)
 		for _, match := range matches {
+			if match[1] == "TestMain" {
+				continue
+			}
 			testFuncNames = append(testFuncNames, match[1])
 		}
 	}

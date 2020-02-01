@@ -34,7 +34,7 @@ func TestNewJob(t *testing.T) {
 	repo := NewSyncedRepository(repoRoot)
 	defer os.RemoveAll(repo.destPath)
 
-	job, err := NewJob(dirPath, repo, 1)
+	job, err := NewJob(repo, &Package{path: dirPath}, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -87,7 +87,7 @@ func checkRepositoryContent(t *testing.T, repoPath, filenameToCheck string) {
 
 func TestNewJob_InvalidDirPath(t *testing.T) {
 	dirPath := "/not/exist/dir"
-	_, err := NewJob(dirPath, NewSyncedRepository("/not/exist"), 1)
+	_, err := NewJob(NewSyncedRepository("/not/exist"), &Package{path: dirPath}, 1)
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
-				job, err := NewJob(dirPath, repo, 1)
+				job, err := NewJob(repo, &Package{path: dirPath}, 1)
 				if err != nil {
 					panic(err)
 				}
@@ -125,60 +125,6 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	}
 }
 
-func TestNewJob_NoGoFiles(t *testing.T) {
-	currDir, _ := os.Getwd()
-	dirPath := filepath.Join(currDir, "testdata", "no_go_files")
-
-	repo := NewSyncedRepository(dirPath)
-	defer os.RemoveAll(repo.destPath)
-
-	job, err := NewJob(dirPath, repo, 1)
-	if err != nil {
-		t.Fatalf("failed to create new job: %v", err)
-	}
-	if job.TestBinaryPath != "" {
-		t.Errorf("test binary path is not empty")
-	}
-	if len(job.Tasks) != 0 {
-		t.Errorf("the dir has no go test functions: %d", len(job.Tasks))
-	}
-}
-
-func TestNewJob_NoGoTestFiles(t *testing.T) {
-	currDir, _ := os.Getwd()
-	dirPath := filepath.Join(currDir, "testdata", "no_go_test_files")
-
-	repo := NewSyncedRepository(dirPath)
-	defer os.RemoveAll(repo.destPath)
-
-	job, err := NewJob(dirPath, repo, 1)
-	if err != nil {
-		t.Fatalf("failed to create new job: %v", err)
-	}
-	if job.TestBinaryPath != "" {
-		t.Errorf("test binary path is not empty")
-	}
-	if len(job.Tasks) != 0 {
-		t.Errorf("the dir has no go test functions: %d", len(job.Tasks))
-	}
-}
-
-func TestNewJob_BuildError(t *testing.T) {
-	currDir, _ := os.Getwd()
-	dirPath := filepath.Join(currDir, "testdata", "build_error")
-
-	repo := NewSyncedRepository(dirPath)
-	defer os.RemoveAll(repo.destPath)
-
-	_, err := NewJob(dirPath, repo, 1)
-	if err == nil {
-		t.Fatalf("nil error")
-	}
-	// repo must be unlocked here.
-	repo.Lock(nil)
-	repo.Unlock()
-}
-
 func TestJob_Finish(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
@@ -186,7 +132,7 @@ func TestJob_Finish(t *testing.T) {
 	repo := NewSyncedRepository(currDir)
 	defer os.RemoveAll(repo.destPath)
 
-	job, err := NewJob(dirPath, repo, 1)
+	job, err := NewJob(repo, &Package{path: dirPath}, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
