@@ -30,11 +30,8 @@ func TestNewJob(t *testing.T) {
 		t.Fatalf("failed to get wd: %v", err)
 	}
 	dirPath := filepath.Join(currDir, "testdata")
-	repoRoot := filepath.Dir(currDir) + string(filepath.Separator)
-	repo := NewSyncedRepository(repoRoot)
-	defer os.RemoveAll(repo.destPath)
 
-	job, err := NewJob(repo, &Package{path: dirPath}, 1)
+	job, err := NewJob(&Package{path: dirPath}, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -47,13 +44,9 @@ func TestNewJob(t *testing.T) {
 	if job.DependencyDepth != 1 {
 		t.Errorf("wrong dependency depth: %v", job.DependencyDepth)
 	}
-	if !strings.HasPrefix(job.TestBinaryPath, "bin/") {
+	if !strings.HasPrefix(job.TestBinaryPath, filepath.Join(sharedDir, "bin")) {
 		t.Errorf("wrong path: %v", job.TestBinaryPath)
 	}
-	if job.Repository != repo {
-		t.Errorf("wrong repository: %v", job.Repository)
-	}
-	checkRepositoryContent(t, job.Repository.destPath, "README.md")
 
 	expectedTasks := []Task{
 		{TestFunction: "TestSum", Job: job},
@@ -70,24 +63,9 @@ func TestNewJob(t *testing.T) {
 	}
 }
 
-func checkRepositoryContent(t *testing.T, repoPath, filenameToCheck string) {
-	fis, err := ioutil.ReadDir(repoPath)
-	if err != nil {
-		t.Fatalf("failed to read %s: %v", repoPath, err)
-	}
-
-	for _, fi := range fis {
-		if fi.Name() == filenameToCheck {
-			return
-		}
-	}
-
-	t.Errorf("can't find %s under %s", filenameToCheck, repoPath)
-}
-
 func TestNewJob_InvalidDirPath(t *testing.T) {
 	dirPath := "/not/exist/dir"
-	_, err := NewJob(NewSyncedRepository("/not/exist"), &Package{path: dirPath}, 1)
+	_, err := NewJob(&Package{path: dirPath}, 1)
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
@@ -96,8 +74,6 @@ func TestNewJob_InvalidDirPath(t *testing.T) {
 func TestNewJob_UniqueIDCheck(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata", "no_go_files")
-	repo := NewSyncedRepository(dirPath)
-	defer os.RemoveAll(repo.destPath)
 
 	ch := make(chan int64)
 	numGoRoutines := 10
@@ -105,7 +81,7 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
-				job, err := NewJob(repo, &Package{path: dirPath}, 1)
+				job, err := NewJob(&Package{path: dirPath}, 1)
 				if err != nil {
 					panic(err)
 				}
@@ -129,10 +105,7 @@ func TestJob_Finish(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
-	repo := NewSyncedRepository(currDir)
-	defer os.RemoveAll(repo.destPath)
-
-	job, err := NewJob(repo, &Package{path: dirPath}, 1)
+	job, err := NewJob(&Package{path: dirPath}, 1)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -141,10 +114,9 @@ func TestJob_Finish(t *testing.T) {
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
 	}
-	if _, err := os.Stat(filepath.Join(sharedDir, job.TestBinaryPath)); !os.IsNotExist(err) {
+	if _, err := os.Stat(job.TestBinaryPath); !os.IsNotExist(err) {
 		t.Errorf("test binary still exist: %v", err)
 	}
-	job.Repository.Lock(nil) // Finish must unlock the repository
 	job.WaitFinished()
 }
 
@@ -160,7 +132,7 @@ func TestTaskSet_Start(t *testing.T) {
 	if set.StartedAt.IsZero() {
 		t.Errorf("StartedAt is zero")
 	}
-	if set.LogPath != "log/1_1" {
+	if set.LogPath != filepath.Join(sharedDir, "log", "1_1") {
 		t.Errorf("wrong log path: %s", set.LogPath)
 	}
 }

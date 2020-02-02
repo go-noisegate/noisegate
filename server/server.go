@@ -17,8 +17,7 @@ import (
 	"github.com/ks888/hornet/common/log"
 )
 
-var sharedDir string                              // host side
-const sharedDirOnContainer = "/opt/hornet/shared" // container side
+var sharedDir string
 
 // SetUpSharedDir initializes the specified directory.
 func SetUpSharedDir(dir string) {
@@ -34,21 +33,19 @@ func SetUpSharedDir(dir string) {
 // HornetServer serves the APIs for the cli client.
 type HornetServer struct {
 	*http.Server
-	jobManager        *JobManager
-	workerManager     *WorkerManager
-	repositoryManager *RepositoryManager
-	packageManager    *PackageManager
-	depthLimit        int
+	jobManager     *JobManager
+	workerManager  *WorkerManager
+	packageManager *PackageManager
+	depthLimit     int
 }
 
 // NewHornetServer returns the new hornet server.
 // We can use only one server instance in the process even if the address is different.
 func NewHornetServer(addr string, workerManager *WorkerManager) HornetServer {
 	s := HornetServer{
-		jobManager:        NewJobManager(),
-		workerManager:     workerManager,
-		repositoryManager: NewRepositoryManager(),
-		packageManager:    NewPackageManager(),
+		jobManager:     NewJobManager(),
+		workerManager:  workerManager,
+		packageManager: NewPackageManager(),
 	}
 
 	mux := http.NewServeMux()
@@ -90,12 +87,6 @@ func (s HornetServer) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("setup %s\n", input.Path)
-
-	if err := s.repositoryManager.Watch(input.Path, true); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("failed to watch %s: %v", input.Path, err)
-		return
-	}
 
 	if err := s.prebuild(input.Path); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -153,13 +144,6 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("test %s\n", input.Path)
 
-	if err := s.repositoryManager.Watch(pathDir, false); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "failed to watch the repository %s: %v\n", pathDir, err)
-		return
-	}
-	repo, _ := s.repositoryManager.Find(pathDir)
-
 	if err := s.packageManager.Watch(pathDir); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "failed to watch the package %s: %v\n", pathDir, err)
@@ -167,7 +151,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, _ := s.packageManager.Find(pathDir)
 
-	job, err := NewJob(repo, pkg, 0)
+	job, err := NewJob(pkg, 0)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -242,7 +226,7 @@ func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {
 	}
 	elapsedTime := taskSet.FinishedAt.Sub(taskSet.StartedAt)
 	fmt.Fprintf(w, "%s: Job#%d/TaskSet#%d (%s) (%v)\n", result, job.ID, taskSet.ID, job.DirPath, elapsedTime)
-	content, err := ioutil.ReadFile(filepath.Join(sharedDir, taskSet.LogPath))
+	content, err := ioutil.ReadFile(taskSet.LogPath)
 	if err != nil {
 		log.Debugf("failed to read the log file: %v\n", err)
 		fmt.Fprintf(w, "(no test log)\n")
@@ -275,12 +259,11 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 	log.Debugf("%s handles the task set %d\n", worker.Name, taskSet.ID)
 
 	resp := &common.NextTaskSetResponse{
-		JobID:             job.ID,
-		TaskSetID:         taskSet.ID,
-		LogPath:           filepath.Join(sharedDirOnContainer, taskSet.LogPath),
-		TestBinaryPath:    filepath.Join(sharedDirOnContainer, job.TestBinaryPath),
-		RepoPath:          filepath.Join(sharedDirOnContainer, job.Repository.destPathFromSharedDir),
-		RepoToPackagePath: job.RepoToPackagePath,
+		JobID:          job.ID,
+		TaskSetID:      taskSet.ID,
+		LogPath:        taskSet.LogPath,
+		TestBinaryPath: job.TestBinaryPath,
+		PackagePath:    job.Package.path,
 	}
 	for _, t := range taskSet.Tasks {
 		resp.TestFunctions = append(resp.TestFunctions, t.TestFunction)

@@ -31,19 +31,11 @@ func TestHandleSetup(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("unexpected code: %d", w.Code)
 	}
-	defer clean(server.repositoryManager, path)
 
 	out, _ := ioutil.ReadAll(w.Body)
 	if string(out) != "accepted\n" {
 		t.Errorf("unexpected response body: %s", string(out))
 	}
-}
-
-func clean(repoManager *RepositoryManager, path string) {
-	repo, _ := repoManager.Find(path)
-	repo.Lock(nil) // wait the end of sync op.
-	repo.Unlock()
-	os.RemoveAll(repo.destPath)
 }
 
 func TestHandleSetup_InvalidJSON(t *testing.T) {
@@ -100,7 +92,6 @@ func TestHandleTest_InputIsFile(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("unexpected code: %d", w.Code)
 	}
-	defer clean(server.repositoryManager, path)
 
 	out, _ := ioutil.ReadAll(w.Body)
 	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+filepath.Dir(path)+`\) `, out)
@@ -135,7 +126,6 @@ func TestHandleTest_InputIsDir(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("unexpected code: %d", w.Code)
 	}
-	defer clean(server.repositoryManager, path)
 
 	out, _ := ioutil.ReadAll(w.Body)
 	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+/TaskSet#0 \(`+path+`\) `, out)
@@ -159,10 +149,6 @@ func TestHandleTest_NoWorkers(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("unexpected code: %d", w.Code)
 	}
-	defer func() {
-		repo, _ := server.repositoryManager.Find(path)
-		os.RemoveAll(repo.destPath)
-	}()
 }
 
 func TestHandleTest_EmptyBody(t *testing.T) {
@@ -203,7 +189,7 @@ func executeTaskSet(t *testing.T, jobManager *JobManager) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	err := ioutil.WriteFile(filepath.Join(sharedDir, taskSet.LogPath), []byte("ok"), 0644)
+	err := ioutil.WriteFile(taskSet.LogPath, []byte("ok"), 0644)
 	if err != nil {
 		t.Fatalf("failed to write log %s: %v", taskSet.LogPath, err)
 	}
@@ -215,12 +201,10 @@ func executeTaskSet(t *testing.T, jobManager *JobManager) {
 
 func TestHandleNextTaskSet(t *testing.T) {
 	dirPath := "/path/to/dir/"
-	repo := NewSyncedRepository(dirPath)
-	defer os.RemoveAll(repo.destPath)
 
 	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
 	server := NewHornetServer("", workerManager)
-	job := &Job{ID: 1, DirPath: dirPath, TestBinaryPath: "/path/to/binary", Repository: repo, finishedCh: make(chan struct{})}
+	job := &Job{ID: 1, DirPath: dirPath, Package: &Package{path: dirPath}, TestBinaryPath: "/path/to/binary", finishedCh: make(chan struct{})}
 	task := &Task{TestFunction: "TestFunc1", Job: job}
 	job.Tasks = append(job.Tasks, task)
 	server.jobManager.Partition(job, 1)
@@ -250,11 +234,11 @@ func TestHandleNextTaskSet(t *testing.T) {
 	if decodedResp.LogPath == "/opt/hornet/shared" {
 		t.Errorf("empty log path")
 	}
-	if decodedResp.TestBinaryPath != "/opt/hornet/shared/path/to/binary" {
+	if decodedResp.TestBinaryPath != "/path/to/binary" {
 		t.Errorf("unexpected test binary path: %s", decodedResp.TestBinaryPath)
 	}
-	if decodedResp.RepoPath != filepath.Clean("/opt/hornet/shared/src"+dirPath) {
-		t.Errorf("unexpected test repo archive path: %s", decodedResp.RepoPath)
+	if decodedResp.PackagePath != dirPath {
+		t.Errorf("unexpected test repo archive path: %s", decodedResp.PackagePath)
 	}
 
 	if taskSet.Status != TaskSetStatusStarted {
@@ -278,9 +262,9 @@ func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
 	server := NewHornetServer("", workerManager)
 
-	emptyJob := &Job{ID: 1, finishedCh: make(chan struct{}), Repository: NewSyncedRepository("/path/to/file")}
+	emptyJob := &Job{ID: 1, Package: &Package{}, finishedCh: make(chan struct{})}
 	server.jobManager.AddJob(emptyJob)
-	job := &Job{ID: 2, finishedCh: make(chan struct{}), Repository: NewSyncedRepository("/path/to/file")}
+	job := &Job{ID: 2, Package: &Package{}, finishedCh: make(chan struct{})}
 	task := &Task{TestFunction: "TestFunc1", Job: job}
 	job.Tasks = append(job.Tasks, task)
 	server.jobManager.Partition(job, 1)
@@ -316,14 +300,14 @@ func TestHandleNextTaskSet_InvalidReqBody(t *testing.T) {
 func TestHandleReportResult(t *testing.T) {
 	server := NewHornetServer("", &WorkerManager{})
 
-	job := &Job{ID: 1, finishedCh: make(chan struct{}), Repository: NewSyncedRepository("/path/to/file")}
+	job := &Job{ID: 1, finishedCh: make(chan struct{})}
 	task := &Task{TestFunction: "TestJobManager_ReportResult", Job: job}
 	job.Tasks = append(job.Tasks, task)
 	server.jobManager.Partition(job, 1)
 	server.jobManager.AddJob(job)
 
 	logContent := "=== RUN   TestJobManager_ReportResult\n--- PASS: TestJobManager_ReportResult (1.00s)"
-	err := ioutil.WriteFile(filepath.Join(sharedDir, job.TaskSets[0].LogPath), []byte(logContent), 0644)
+	err := ioutil.WriteFile(job.TaskSets[0].LogPath, []byte(logContent), 0644)
 	if err != nil {
 		t.Fatalf("failed to write log %s: %v", job.TaskSets[0].LogPath, err)
 	}

@@ -21,14 +21,11 @@ import (
 
 // Job represents the job to test one package.
 type Job struct {
-	ID      int64
-	DirPath string
-	Status  JobStatus
-	Package *Package
-	// The path from the shared dir
+	ID                    int64
+	DirPath               string
+	Status                JobStatus
+	Package               *Package
 	TestBinaryPath        string
-	Repository            *SyncedRepository
-	RepoToPackagePath     string
 	CreatedAt, FinishedAt time.Time
 	DependencyDepth       int
 	TaskSets              []*TaskSet
@@ -46,24 +43,16 @@ const (
 )
 
 // NewJob returns the new job.
-// When the job is created successfully, the repository is locked.
-func NewJob(repository *SyncedRepository, pkg *Package, dependencyDepth int) (*Job, error) {
+func NewJob(pkg *Package, dependencyDepth int) (*Job, error) {
 	job := &Job{
 		ID:              generateID(),
 		DirPath:         pkg.path,
 		Package:         pkg,
 		Status:          JobStatusCreated,
-		Repository:      repository,
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
 		finishedCh:      make(chan struct{}),
 	}
-
-	relPath, err := filepath.Rel(repository.srcPath, pkg.path)
-	if err != nil {
-		return nil, err
-	}
-	job.RepoToPackagePath = relPath
 
 	errCh := make(chan error)
 	binaryPathCh := make(chan string, 1) // to avoid go routine leaks
@@ -78,8 +67,8 @@ func NewJob(repository *SyncedRepository, pkg *Package, dependencyDepth int) (*J
 			log.Debugf("build time: %v\n", time.Since(start))
 		}()
 
-		testBinaryPath := filepath.Join("bin", strconv.FormatInt(job.ID, 10))
-		err := pkg.Build(filepath.Join(sharedDir, testBinaryPath))
+		testBinaryPath := filepath.Join(sharedDir, "bin", strconv.FormatInt(job.ID, 10))
+		err := pkg.Build(testBinaryPath)
 		if err != nil {
 			if err == errNoGoTestFiles {
 				err = nil
@@ -88,19 +77,6 @@ func NewJob(repository *SyncedRepository, pkg *Package, dependencyDepth int) (*J
 		}
 		errCh <- err
 		binaryPathCh <- testBinaryPath
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		repository.Lock(job)
-
-		start := time.Now()
-		defer func() {
-			log.Debugf("sync time: %v\n", time.Since(start))
-		}()
-
-		errCh <- repository.SyncInLock()
 	}()
 
 	wg.Add(1)
@@ -116,6 +92,7 @@ func NewJob(repository *SyncedRepository, pkg *Package, dependencyDepth int) (*J
 		close(errCh)
 	}()
 
+	var err error
 	for e := range errCh {
 		err = multierr.Combine(err, e)
 	}
@@ -244,13 +221,10 @@ func (j *Job) Finish() {
 
 func (j *Job) clean() {
 	if j.TestBinaryPath != "" {
-		absPath := filepath.Join(sharedDir, j.TestBinaryPath)
-		if err := os.Remove(absPath); err != nil {
-			log.Debugf("failed to remove the test binary %s: %v\n", absPath, err)
+		if err := os.Remove(j.TestBinaryPath); err != nil {
+			log.Debugf("failed to remove the test binary %s: %v\n", j.TestBinaryPath, err)
 		}
 	}
-
-	j.Repository.Unlock()
 
 	// should not remove task sets' logs here because the client may not read them yet.
 }
@@ -266,12 +240,11 @@ type TaskSet struct {
 	ID                    int
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
-	// The path from the shared dir
-	LogPath         string
-	Tasks           []*Task
-	WorkerGroupName string
-	WorkerID        int
-	finishedCh      chan struct{}
+	LogPath               string
+	Tasks                 []*Task
+	WorkerGroupName       string
+	WorkerID              int
+	finishedCh            chan struct{}
 }
 
 // TaskSetStatus represents the status of the task set.
@@ -289,7 +262,7 @@ func NewTaskSet(id int, job *Job) *TaskSet {
 	return &TaskSet{
 		ID:         id,
 		Status:     TaskSetStatusCreated,
-		LogPath:    filepath.Join("log", fmt.Sprintf("%d_%d", job.ID, id)),
+		LogPath:    filepath.Join(sharedDir, "log", fmt.Sprintf("%d_%d", job.ID, id)),
 		finishedCh: make(chan struct{}),
 	}
 }

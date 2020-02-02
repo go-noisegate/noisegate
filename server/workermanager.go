@@ -44,7 +44,7 @@ func (m *WorkerManager) AddWorker(host, image string) error {
 	}
 
 	// TODO: need `--restart always` option?
-	createArgs := append(commonArgs, "create", "--volume", sharedDir+":"+sharedDirOnContainer, "--name", workerName, image, workerBinName, "--addr", m.ServerAddress)
+	createArgs := append(commonArgs, "create", "--volume", sharedDir+":/", "--name", workerName, image, workerBinName, "--addr", m.ServerAddress)
 	if log.DebugLogEnabled() {
 		createArgs = append(createArgs, "--debug")
 	}

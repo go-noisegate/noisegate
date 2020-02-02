@@ -50,10 +50,7 @@ type NextTaskSetResponse struct {
 	LogPath string `json:"log_path"`
 	// The path from the shared dir
 	TestBinaryPath string `json:"test_binary_path"`
-	// The path from the shared dir
-	RepoPath string `json:"repo_path"`
-	// The path from the repository root
-	RepoToPackagePath string `json:"repo_to_package_path"`
+	PackagePath    string `json:"package_path"`
 }
 
 // ReportResultRequest represents the input data to the report result API.

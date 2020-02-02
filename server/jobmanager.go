@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"path/filepath"
 	"regexp"
 	"sync"
 	"time"
@@ -90,7 +89,7 @@ func (m *JobManager) ReportResult(jobID int64, taskSetID int, successful bool) e
 	}
 
 	taskSet := job.TaskSets[taskSetID]
-	rawProfiles := m.parseGoTestLog(filepath.Join(sharedDir, taskSet.LogPath))
+	rawProfiles := m.parseGoTestLog(taskSet.LogPath)
 	for _, t := range taskSet.Tasks {
 		p, ok := rawProfiles[t.TestFunction]
 		if ok {
