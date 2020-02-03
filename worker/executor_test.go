@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -42,7 +41,7 @@ func TestRun(t *testing.T) {
 				JobID:          1,
 				TaskSetID:      1,
 				LogPath:        filepath.Join(tempDir, "testlog"),
-				RepoPath:       "/path/to/not/exist/file",
+				PackagePath:    "/path/to/not/exist/file",
 				TestBinaryPath: "echo",
 			},
 			expect: false,
@@ -86,7 +85,7 @@ func TestRun(t *testing.T) {
 		})
 		server := httptest.NewServer(mux)
 
-		e := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://"), Workspace: tempDir}
+		e := Executor{GroupName: "test", ID: 0, Addr: strings.TrimPrefix(server.URL, "http://")}
 		if err := e.Run(ctx); !errors.Is(err, context.Canceled) {
 			t.Fatalf("not canceled error: %v", err)
 		}
@@ -164,15 +163,12 @@ func TestExecute(t *testing.T) {
 	}
 	defer os.Remove(tempFile.Name())
 
-	_, filename, _, _ := runtime.Caller(0)
-	thisDir := filepath.Dir(filename)
-
 	taskSet := nextTaskSet{
 		TestFunctions:  []string{"f1", "f2"},
 		LogPath:        tempFile.Name(),
 		TestBinaryPath: "echo",
 	}
-	e := Executor{Workspace: thisDir}
+	e := Executor{}
 	if err := e.execute(context.Background(), taskSet); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1,53 +1,67 @@
 package server
 
 import (
+	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestWorkerManager_AddWorker(t *testing.T) {
-	manager := &WorkerManager{ServerAddress: "host.docker.internal:48059"}
+	manager := &WorkerManager{WorkerGroupName: "g1", ServerAddress: "localhost:48059"}
 
-	orgWGName := workerGroupName
-	workerGroupName = "test"
 	orgPath := os.Getenv("PATH")
 	os.Setenv("PATH", "testdata"+string(filepath.ListSeparator)+orgPath)
 	defer func() {
-		manager.RemoveWorkers()
-		workerGroupName = orgWGName
 		os.Setenv("PATH", orgPath)
 	}()
 
-	err := manager.AddWorker("", "alpine:3.11")
-	if err != nil {
+	if err := manager.AddWorker(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(manager.Workers) != 1 {
-		t.Fatalf("invalid size of workers: %d", len(manager.Workers))
+	if len(manager.workers) != 1 {
+		t.Fatalf("invalid size of workers: %d", len(manager.workers))
 	}
-	w := manager.Workers[0]
+	w := manager.workers[0]
 	if w.ID != 0 {
 		t.Errorf("invalid id: %d", w.ID)
 	}
-	if w.Name != "hornet-worker-test-000" {
+	if w.Name != "worker-g1-000" {
 		t.Errorf("invalid name: %s", w.Name)
 	}
+	if w.LogPath != filepath.Join(sharedDir, "log", "worker", w.Name) {
+		t.Errorf("invalid log path: %s", w.LogPath)
+	}
 
-	cmd := exec.Command("docker", "logs", w.Name)
-	out, _ := cmd.CombinedOutput()
-	if strings.TrimSpace(string(out)) != "--addr host.docker.internal:48059 --debug test 0" {
-		t.Errorf("invalid output: %s", string(out))
+	if _, err := w.Process.Wait(); err != nil {
+		t.Fatalf("failed to wait: %w", err)
+	}
+	defer os.Remove(w.LogPath)
+	out, _ := ioutil.ReadFile(w.LogPath)
+	if strings.TrimSpace(string(out)) != "--addr localhost:48059 --debug g1 0" {
+		t.Errorf("invalid log: %s", string(out))
+	}
+}
+
+func TestWorkerManager_AddWorker_SpecifyWorkerBin(t *testing.T) {
+	manager := &WorkerManager{
+		WorkerGroupName: "g1",
+		ServerAddress:   "localhost:48059",
+		WorkerBinPath:   filepath.Join("testdata", workerBinName),
+	}
+	defer manager.RemoveWorkers()
+
+	if err := manager.AddWorker(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestWorkerManager_AddWorker_NoWorkerBin(t *testing.T) {
 	manager := &WorkerManager{WorkerBinPath: "/file/not/exist"}
 
-	err := manager.AddWorker("", "alpine:3.11")
+	err := manager.AddWorker()
 	if err == nil {
 		t.Fatalf("nil error")
 	}

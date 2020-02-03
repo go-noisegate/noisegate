@@ -55,6 +55,9 @@ type NextTaskSetResponse struct {
 
 // ReportResultRequest represents the input data to the report result API.
 type ReportResultRequest struct {
+	WorkerGroupName string `json:"worker_group_name"`
+	WorkerID        int    `json:"worker_id"`
+
 	JobID      int64 `json:"job_id"`
 	TaskSetID  int   `json:"task_set_id"`
 	Successful bool  `json:"successful"`

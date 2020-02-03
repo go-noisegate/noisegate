@@ -4,29 +4,27 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/ks888/hornet/common/log"
 )
 
-// For the testing purpose, we allow multiple sets of workers.
-var workerGroupName = "default"
-
 const workerBinName = "hornet-worker"
 
 // WorkerManager manages the workers.
 type WorkerManager struct {
-	ServerAddress string // the hornetd server address usable inside container
-	WorkerBinPath string // if empty, search the PATH directories
-	Workers       []Worker
-	mtx           sync.Mutex
+	ServerAddress   string // the hornetd server address usable inside container
+	WorkerBinPath   string
+	WorkerGroupName string
+	workers         []Worker
+	mtx             sync.Mutex
 }
 
-// AddWorker starts a new worker. `host` specifies daemon socket(s) to connect to. If `host` is empty,
-// the default docker daemon is used.
-func (m *WorkerManager) AddWorker(host, image string) error {
+// AddWorker starts a new worker.
+// To find the worker binary, `WorkerBinPath` is used if it's not empty. Otherwise, search the PATH directories.
+func (m *WorkerManager) AddWorker() error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -35,46 +33,30 @@ func (m *WorkerManager) AddWorker(host, image string) error {
 		return fmt.Errorf("failed to find the %s command: %w", workerBinName, err)
 	}
 
-	workerID := len(m.Workers)
-	workerName := fmt.Sprintf("hornet-worker-%s-%03d", workerGroupName, workerID)
-
-	var commonArgs []string
-	if host != "" {
-		commonArgs = append(commonArgs, "--host", host)
+	workerID := len(m.workers)
+	workerName := fmt.Sprintf("worker-%s-%03d", m.WorkerGroupName, workerID)
+	logPath := filepath.Join(sharedDir, "log", "worker", workerName)
+	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("failed to open the log file: %w", err)
 	}
 
-	// TODO: need `--restart always` option?
-	createArgs := append(commonArgs, "create", "--volume", sharedDir+":/", "--name", workerName, image, workerBinName, "--addr", m.ServerAddress)
+	args := []string{"--addr", m.ServerAddress}
 	if log.DebugLogEnabled() {
-		createArgs = append(createArgs, "--debug")
+		args = append(args, "--debug")
 	}
-	createArgs = append(createArgs, workerGroupName, strconv.Itoa(workerID))
-	cmd := exec.Command("docker", createArgs...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to create container: %w\n%s", err, string(out))
-	}
-	containerID := strings.TrimSpace(string(out))
-
-	cpArgs := append(commonArgs, "cp", workerBinPath, containerID+":/usr/bin/"+workerBinName)
-	cmd = exec.Command("docker", cpArgs...)
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to copy binary: %v\n%s", err, string(out))
+	args = append(args, m.WorkerGroupName, strconv.Itoa(workerID))
+	cmd := exec.Command(workerBinPath, args...)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to run the worker: %w", err)
 	}
 
-	startArgs := append(commonArgs, "start", containerID)
-	cmd = exec.Command("docker", startArgs...)
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to run the container: %w\noutput:\n%s", err, string(out))
-	}
-
-	m.Workers = append(m.Workers, Worker{workerID, workerName, host, image})
+	m.workers = append(m.workers, Worker{ID: workerID, Name: workerName, LogPath: logPath, Process: cmd.Process})
 	return nil
 }
 
-// TODO: leave the doc to explain the logic here.
 func (m *WorkerManager) findBinPath() (string, error) {
 	if m.WorkerBinPath != "" {
 		if _, err := os.Stat(m.WorkerBinPath); os.IsNotExist(err) {
@@ -95,19 +77,9 @@ func (m *WorkerManager) RemoveWorkers() {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	for _, w := range m.Workers {
-		for _, dockerCmd := range []string{"stop", "rm"} {
-			var args []string
-			if w.Host != "" {
-				args = append(args, "--host", w.Host)
-			}
-			args = append(args, dockerCmd, w.Name)
-			cmd := exec.Command("docker", args...)
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				log.Debugf("failed to %s the container %s: %v\noutput:\n%s", dockerCmd, w.Name, err, string(out))
-				break
-			}
+	for _, w := range m.workers {
+		if err := w.Process.Kill(); err != nil {
+			log.Printf("failed to kill the process: %v", err)
 		}
 	}
 }
@@ -117,14 +89,14 @@ func (m *WorkerManager) NumWorkers() int {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	return len(m.Workers)
+	return len(m.workers)
 }
 
 // Worker represents one worker.
 type Worker struct {
 	// This id is unique only among the worker group.
-	ID    int
-	Name  string
-	Host  string
-	Image string
+	ID      int
+	Name    string
+	LogPath string
+	Process *os.Process
 }

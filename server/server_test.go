@@ -75,7 +75,7 @@ func TestHandleSetup_PathNotFound(t *testing.T) {
 }
 
 func TestHandleTest_InputIsFile(t *testing.T) {
-	workerManager := &WorkerManager{Workers: make([]Worker, 1)}
+	workerManager := &WorkerManager{workers: make([]Worker, 1)}
 	server := NewHornetServer("", workerManager)
 
 	curr, err := os.Getwd()
@@ -109,7 +109,7 @@ func TestHandleTest_InputIsFile(t *testing.T) {
 }
 
 func TestHandleTest_InputIsDir(t *testing.T) {
-	workerManager := &WorkerManager{Workers: make([]Worker, 1)}
+	workerManager := &WorkerManager{workers: make([]Worker, 1)}
 	server := NewHornetServer("", workerManager)
 
 	curr, err := os.Getwd()
@@ -182,7 +182,7 @@ func executeTaskSet(t *testing.T, jobManager *JobManager) {
 	var taskSet *TaskSet
 	for {
 		var err error
-		job, taskSet, err = jobManager.NextTaskSet(workerGroupName, 0)
+		job, taskSet, err = jobManager.NextTaskSet("g1", 0)
 		if err == nil {
 			break
 		}
@@ -202,7 +202,7 @@ func executeTaskSet(t *testing.T, jobManager *JobManager) {
 func TestHandleNextTaskSet(t *testing.T) {
 	dirPath := "/path/to/dir/"
 
-	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
+	workerManager := &WorkerManager{workers: []Worker{{Name: "test"}}}
 	server := NewHornetServer("", workerManager)
 	job := &Job{ID: 1, DirPath: dirPath, Package: &Package{path: dirPath}, TestBinaryPath: "/path/to/binary", finishedCh: make(chan struct{})}
 	task := &Task{TestFunction: "TestFunc1", Job: job}
@@ -247,7 +247,7 @@ func TestHandleNextTaskSet(t *testing.T) {
 }
 
 func TestHandleNextTaskSet_NoTaskSet(t *testing.T) {
-	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
+	workerManager := &WorkerManager{workers: []Worker{{Name: "test"}}}
 	server := NewHornetServer("", workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{}`))
 	resp := httptest.NewRecorder()
@@ -259,7 +259,7 @@ func TestHandleNextTaskSet_NoTaskSet(t *testing.T) {
 }
 
 func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
-	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
+	workerManager := &WorkerManager{workers: []Worker{{Name: "test"}}}
 	server := NewHornetServer("", workerManager)
 
 	emptyJob := &Job{ID: 1, Package: &Package{}, finishedCh: make(chan struct{})}
@@ -287,11 +287,23 @@ func TestHandleNextTaskSet_EmptyTaskSet(t *testing.T) {
 }
 
 func TestHandleNextTaskSet_InvalidReqBody(t *testing.T) {
-	workerManager := &WorkerManager{Workers: []Worker{{Name: "test"}}}
+	workerManager := &WorkerManager{workers: []Worker{{Name: "test"}}}
 	server := NewHornetServer("", workerManager)
 	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{`))
 	resp := httptest.NewRecorder()
 	server.handleNextTaskSet(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("unexpected status: %d", resp.Code)
+	}
+}
+
+func TestHandleNextTaskSet_InvalidWorker(t *testing.T) {
+	workerManager := &WorkerManager{workers: []Worker{{Name: "test"}}, WorkerGroupName: "newgroup"}
+	server := NewHornetServer("", workerManager)
+	req := httptest.NewRequest(http.MethodGet, common.NextTaskSetPath, strings.NewReader(`{"worker_group_name": "oldgroup"}`))
+	resp := httptest.NewRecorder()
+	server.handleNextTaskSet(resp, req)
+
 	if resp.Code != http.StatusBadRequest {
 		t.Errorf("unexpected status: %d", resp.Code)
 	}
@@ -360,6 +372,18 @@ func TestHandleReportResult_InvalidJSON(t *testing.T) {
 	server := NewHornetServer("", workerManager)
 
 	req := httptest.NewRequest(http.MethodGet, common.ReportResultPath, strings.NewReader("{"))
+	resp := httptest.NewRecorder()
+	server.handleReportResult(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("unexpected status: %d", resp.Code)
+	}
+}
+
+func TestHandleReportResult_InvalidWorker(t *testing.T) {
+	server := NewHornetServer("", &WorkerManager{WorkerGroupName: "newgroup"})
+	reqBody := common.ReportResultRequest{WorkerGroupName: "oldgroup"}
+	data, _ := json.Marshal(&reqBody)
+	req := httptest.NewRequest(http.MethodGet, common.ReportResultPath, bytes.NewReader(data))
 	resp := httptest.NewRecorder()
 	server.handleReportResult(resp, req)
 	if resp.Code != http.StatusBadRequest {

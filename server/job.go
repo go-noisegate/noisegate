@@ -262,7 +262,7 @@ func NewTaskSet(id int, job *Job) *TaskSet {
 	return &TaskSet{
 		ID:         id,
 		Status:     TaskSetStatusCreated,
-		LogPath:    filepath.Join(sharedDir, "log", fmt.Sprintf("%d_%d", job.ID, id)),
+		LogPath:    filepath.Join(sharedDir, "log", "job", fmt.Sprintf("%d_%d", job.ID, id)),
 		finishedCh: make(chan struct{}),
 	}
 }

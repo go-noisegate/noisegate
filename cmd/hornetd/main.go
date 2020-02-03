@@ -20,7 +20,6 @@ func main() {
 		Name:      filepath.Base(os.Args[0]),
 		ArgsUsage: "[server address (default: \"localhost:48059\")]",
 		Action: func(c *cli.Context) error {
-			// TODO: make sure it's accessible from docker containers.
 			addr := "localhost:48059" // bees
 			if c.NArg() > 0 {
 				addr = c.Args().First()
@@ -29,10 +28,8 @@ func main() {
 			log.EnableDebugLog(c.Bool("debug"))
 
 			opt := workerOptions{
-				addrFromContainer: c.String("address-from-container"),
-				numWorkers:        c.Int("num-workers"),
-				workerPath:        c.String("worker-path"),
-				image:             c.String("image"),
+				numWorkers: c.Int("num-workers"),
+				workerPath: c.String("worker-path"),
 			}
 			return runServer(addr, opt)
 		},
@@ -41,11 +38,6 @@ func main() {
 				Name:  "debug",
 				Usage: "print the debug logs",
 				Value: false,
-			},
-			&cli.StringFlag{
-				Name:  "address-from-container",
-				Usage: "address to access hornetd server from container",
-				Value: "host.docker.internal:48059",
 			},
 			&cli.IntFlag{
 				Name:  "num-workers",
@@ -56,11 +48,6 @@ func main() {
 				Name:  "worker-path",
 				Usage: "path to the `hornet-worker` binary. If empty, search the PATH directories",
 				Value: "",
-			},
-			&cli.StringFlag{
-				Name:  "image",
-				Usage: "the docker image the workers use",
-				Value: "alpine:3.11",
 			},
 		},
 		HideHelp: true, // to hide the `COMMANDS` section in the help message.
@@ -73,10 +60,8 @@ func main() {
 }
 
 type workerOptions struct {
-	addrFromContainer string
-	numWorkers        int
-	workerPath        string
-	image             string
+	numWorkers int
+	workerPath string
 }
 
 func runServer(addr string, opt workerOptions) error {
@@ -90,11 +75,14 @@ func runServer(addr string, opt workerOptions) error {
 	defer os.RemoveAll(sharedDir)
 	server.SetUpSharedDir(sharedDir)
 
-	workerManager := &server.WorkerManager{ServerAddress: opt.addrFromContainer, WorkerBinPath: opt.workerPath}
-	// TODO: remove workers if the process exits here (or always remove old workers here anyway?)
+	workerManager := &server.WorkerManager{
+		ServerAddress:   addr,
+		WorkerBinPath:   opt.workerPath,
+		WorkerGroupName: filepath.Base(sharedDir),
+	}
 	log.Printf("start %d workers\n", opt.numWorkers)
 	for i := 0; i < opt.numWorkers; i++ {
-		if err := workerManager.AddWorker("", opt.image); err != nil {
+		if err := workerManager.AddWorker(); err != nil {
 			return fmt.Errorf("failed to add the worker #%d: %w", i, err)
 		}
 	}

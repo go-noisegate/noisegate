@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +22,6 @@ type Executor struct {
 	GroupName string
 	ID        int
 	Addr      string
-	Workspace string
 }
 
 var waitTime = 100 * time.Millisecond
@@ -92,10 +89,6 @@ func (e Executor) nextTaskSet(ctx context.Context) (nextTaskSet, error) {
 	return nextTaskSet(respData), nil
 }
 
-func (e Executor) workspacePath(taskSet nextTaskSet) string {
-	return filepath.Join(e.Workspace, strconv.FormatInt(taskSet.JobID, 10))
-}
-
 func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 	start := time.Now()
 	defer func() {
@@ -103,7 +96,7 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 	}()
 
 	cmd := exec.CommandContext(ctx, taskSet.TestBinaryPath, "-test.v", "-test.run", strings.Join(taskSet.TestFunctions, "|"))
-	cmd.Dir = filepath.Join(taskSet.RepoPath, taskSet.RepoToPackagePath)
+	cmd.Dir = taskSet.PackagePath
 
 	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)
 	if err != nil {
@@ -118,7 +111,7 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 }
 
 func (e Executor) reportResult(ctx context.Context, taskSet nextTaskSet, successful bool) error {
-	reqData := common.ReportResultRequest{JobID: taskSet.JobID, TaskSetID: taskSet.TaskSetID, Successful: successful}
+	reqData := common.ReportResultRequest{WorkerGroupName: e.GroupName, WorkerID: e.ID, JobID: taskSet.JobID, TaskSetID: taskSet.TaskSetID, Successful: successful}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err

@@ -105,7 +105,6 @@ var patternNoGoFiles = regexp.MustCompile(`(?m)can't load package: package .+: n
 
 func (p *Package) buildContext(ctx context.Context, artifactPath string) error {
 	cmd := exec.CommandContext(ctx, "go", "test", "-c", "-o", artifactPath, ".")
-	cmd.Env = append(os.Environ(), "GOOS=linux")
 	cmd.Dir = p.path
 
 	buildLog, err := cmd.CombinedOutput()

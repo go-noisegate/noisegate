@@ -25,6 +25,8 @@ func SetUpSharedDir(dir string) {
 	os.Mkdir(filepath.Join(sharedDir, "bin"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "lib"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "log"), os.ModePerm)
+	os.Mkdir(filepath.Join(sharedDir, "log", "job"), os.ModePerm)
+	os.Mkdir(filepath.Join(sharedDir, "log", "worker"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "src"), os.ModePerm)
 
 	log.Debugf("shared dir: %s", sharedDir)
@@ -244,6 +246,12 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if s.workerManager.WorkerGroupName != req.WorkerGroupName {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid group name\n"))
+		return
+	}
+
 	job, taskSet, err := s.jobManager.NextTaskSet(req.WorkerGroupName, req.WorkerID)
 	if err != nil {
 		if err == errNoTaskSet {
@@ -255,7 +263,7 @@ func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	worker := s.workerManager.Workers[req.WorkerID]
+	worker := s.workerManager.workers[req.WorkerID]
 	log.Debugf("%s handles the task set %d\n", worker.Name, taskSet.ID)
 
 	resp := &common.NextTaskSetResponse{
@@ -282,6 +290,12 @@ func (s HornetServer) handleReportResult(w http.ResponseWriter, r *http.Request)
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if s.workerManager.WorkerGroupName != req.WorkerGroupName {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("invalid group name\n"))
 		return
 	}
 

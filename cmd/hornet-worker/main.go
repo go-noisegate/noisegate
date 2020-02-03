@@ -27,7 +27,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			w := worker.Executor{GroupName: groupName, ID: workerID, Addr: c.String("addr"), Workspace: c.String("workspace")}
+			w := worker.Executor{GroupName: groupName, ID: workerID, Addr: c.String("addr")}
 			return w.Run(c.Context)
 		},
 		Flags: []cli.Flag{
@@ -40,11 +40,6 @@ func main() {
 				Name:  "debug",
 				Usage: "print the debug logs",
 				Value: false,
-			},
-			&cli.StringFlag{
-				Name:  "workspace",
-				Usage: "workspace dir the worker uses",
-				Value: "/opt/hornet/workspace",
 			},
 		},
 	}

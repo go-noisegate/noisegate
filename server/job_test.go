@@ -122,7 +122,7 @@ func TestJob_Finish(t *testing.T) {
 
 func TestTaskSet_Start(t *testing.T) {
 	set := NewTaskSet(1, &Job{ID: 1})
-	set.Start(workerGroupName, 1)
+	set.Start("g1", 1)
 	if set.Status != TaskSetStatusStarted {
 		t.Errorf("wrong status: %v", set.Status)
 	}
