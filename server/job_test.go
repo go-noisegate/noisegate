@@ -224,33 +224,6 @@ func TestLPTPartition_EmptyProfile(t *testing.T) {
 	}
 }
 
-func TestLPTPartition_SortByName(t *testing.T) {
-	p := NewLPTPartitioner(NewSimpleProfiler())
-
-	job := &Job{DirPath: "/path"}
-	job.Tasks = []*Task{
-		{TestFunction: "f3", Job: job},
-		{TestFunction: "f2", Job: job},
-		{TestFunction: "f1", Job: job},
-	}
-	taskSets := p.Partition(job, 1)
-	if len(taskSets) != 1 {
-		t.Fatalf("wrong number of task sets: %d", len(taskSets))
-	}
-	if len(taskSets[0].Tasks) != 3 {
-		t.Fatalf("wrong number of tasks: %d", len(taskSets[0].Tasks))
-	}
-	if *taskSets[0].Tasks[0] != *job.Tasks[2] {
-		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[0])
-	}
-	if *taskSets[0].Tasks[1] != *job.Tasks[1] {
-		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[1])
-	}
-	if *taskSets[0].Tasks[2] != *job.Tasks[0] {
-		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[2])
-	}
-}
-
 func TestFindRepoRoot_File(t *testing.T) {
 	curr, err := os.Getwd()
 	if err != nil {

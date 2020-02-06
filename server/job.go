@@ -354,7 +354,6 @@ func (p LPTPartitioner) Partition(job *Job, numPartitions int) []*TaskSet {
 	}
 
 	p.distributeTasks(taskSets, noProfileTasks)
-	p.sortTasksByName(taskSets)
 	return taskSets
 }
 
@@ -381,11 +380,5 @@ func (p LPTPartitioner) distributeTasks(taskSets []*TaskSet, tasks []*Task) {
 		if curr == len(taskSets) {
 			curr = 0
 		}
-	}
-}
-
-func (p LPTPartitioner) sortTasksByName(taskSets []*TaskSet) {
-	for _, ts := range taskSets {
-		sort.Slice(ts.Tasks, func(i, j int) bool { return ts.Tasks[i].TestFunction < ts.Tasks[j].TestFunction })
 	}
 }
