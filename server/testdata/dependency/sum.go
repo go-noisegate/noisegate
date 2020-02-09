@@ -1,5 +1,7 @@
 package dependency
 
+import "math"
+
 func Sum(a, b int) int {
 	return a + b
 }
@@ -21,11 +23,19 @@ var (
 const c1 = 1
 
 type T1 struct {
-	a int
+	t int
 }
 
 func (t T1) Inc(a int) int {
 	return a + 1
+}
+
+func MaxInt8() int {
+	return math.MaxInt8
+}
+
+func (t *T1) Dec(a int) int {
+	return a - 1
 }
 
 // append only
