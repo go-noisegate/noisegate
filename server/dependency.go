@@ -7,18 +7,54 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/ks888/hornet/common/log"
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-type parsedPackage struct {
-	pkg  *ast.Package
-	fset *token.FileSet
-	info *types.Info
+// `filename` must be abs.
+func FindTestFunctions(ctxt *build.Context, filename string, offset int) ([]string, error) {
+	pkg, err := newParsedPackage(ctxt, filepath.Dir(filename))
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := pkg.findEnclosingIdentity(filename, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	users, err := pkg.findUsers(id)
+	if err != nil {
+		return nil, err
+	}
+
+	set := make(map[string]struct{})
+	for _, u := range users {
+		if f := pkg.findTestFunction(u); f != "" {
+			set[f] = struct{}{}
+		}
+	}
+
+	var testFuncs []string
+	for f := range set {
+		testFuncs = append(testFuncs, f)
+	}
+
+	return testFuncs, nil
 }
 
+type parsedPackage struct {
+	pkgDir string
+	pkg    *ast.Package
+	fset   *token.FileSet
+	info   *types.Info
+}
+
+// `packageDir` must be abs.
 func newParsedPackage(ctxt *build.Context, packageDir string) (parsedPackage, error) {
 	pkg, err := ctxt.ImportDir(packageDir, build.IgnoreVendor)
 	if err != nil {
@@ -33,12 +69,13 @@ func newParsedPackage(ctxt *build.Context, packageDir string) (parsedPackage, er
 	parsedFiles := make(map[string]*ast.File)
 	var files []*ast.File // redundant, but types package needs this
 	for _, file := range filenames {
-		f, err := parser.ParseFile(fset, filepath.Join(packageDir, file), nil, 0)
+		path := filepath.Join(packageDir, file)
+		f, err := parser.ParseFile(fset, path, nil, 0)
 		if err != nil {
-			log.Printf("failed to parse %s: %v\n", file, err)
+			log.Printf("failed to parse %s: %v\n", path, err)
 		}
 		if f != nil {
-			parsedFiles[file] = f
+			parsedFiles[path] = f
 			files = append(files, f)
 		}
 	}
@@ -56,15 +93,18 @@ func newParsedPackage(ctxt *build.Context, packageDir string) (parsedPackage, er
 		log.Debugf("type check error: %v", err)
 	}
 	_, _ = conf.Check(astPkg.Name, fset, files, &info)
-	return parsedPackage{pkg: astPkg, fset: fset, info: &info}, nil
+	return parsedPackage{pkgDir: packageDir, pkg: astPkg, fset: fset, info: &info}, nil
 }
 
 // findEnclosingIdentity finds the top level declaration to which the node at the specified `offset` belongs.
 // For example, if the `offset` specifies the position in the function body, it returns the identity of that function.
 func (p parsedPackage) findEnclosingIdentity(filename string, offset int) (identity, error) {
+	if !path.IsAbs(filename) {
+		filename = filepath.Join(p.pkgDir, filename)
+	}
 	var pos token.Pos
 	p.fset.Iterate(func(f *token.File) bool {
-		if filepath.Base(f.Name()) == filepath.Base(filename) {
+		if f.Name() == filename {
 			if offset <= f.Size() {
 				pos = f.Pos(offset)
 			}
@@ -152,9 +192,21 @@ func (p parsedPackage) findUsers(id identity) ([]*ast.Ident, error) {
 	return users, nil
 }
 
-// assumes `filename` is abs
-func FindTestFunctions(ctxt *build.Context, filename string, offset int) ([]token.Position, error) {
-	return nil, nil
+func (p parsedPackage) findTestFunction(id *ast.Ident) string {
+	position := p.fset.Position(id.Pos())
+	if !strings.HasSuffix(position.Filename, "_test.go") {
+		return ""
+	}
+
+	nodes, _ := astutil.PathEnclosingInterval(p.pkg.Files[position.Filename], id.Pos(), id.Pos())
+	for _, n := range nodes {
+		if decl, ok := n.(*ast.FuncDecl); ok {
+			if decl.Recv == nil && strings.HasPrefix(decl.Name.Name, "Test") {
+				return decl.Name.Name
+			}
+		}
+	}
+	return ""
 }
 
 type identity interface {

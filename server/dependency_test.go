@@ -10,6 +10,21 @@ import (
 	"testing"
 )
 
+func TestFindTestFunctions(t *testing.T) {
+	cwd, _ := os.Getwd()
+	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum.go")
+	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 35)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(testFuncs) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
+	}
+	if testFuncs[0] != "TestSum" {
+		t.Errorf("wrong func: %s", testFuncs[0])
+	}
+}
+
 func TestNewParsedPackage(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
@@ -21,7 +36,7 @@ func TestNewParsedPackage(t *testing.T) {
 	findFilename := func(filename string) bool {
 		var found bool
 		pkg.fset.Iterate(func(f *token.File) bool {
-			if filepath.Base(f.Name()) == filepath.Base(filename) {
+			if f.Name() == filename {
 				found = true
 				return false
 			}
@@ -30,10 +45,10 @@ func TestNewParsedPackage(t *testing.T) {
 		return found
 	}
 
-	if !findFilename("sum.go") {
+	if !findFilename(filepath.Join(pkgPath, "sum.go")) {
 		t.Error("no sum.go in file set")
 	}
-	if !findFilename("sum_test.go") {
+	if !findFilename(filepath.Join(pkgPath, "sum_test.go")) {
 		t.Error("no sum_test.go in file set")
 	}
 }
