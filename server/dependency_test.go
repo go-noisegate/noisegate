@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestFindTestFunctions(t *testing.T) {
+func TestFindTestFunctions_Function(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum.go")
 	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 35)
@@ -20,8 +20,47 @@ func TestFindTestFunctions(t *testing.T) {
 	if len(testFuncs) != 1 {
 		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
 	}
-	if testFuncs[0] != "TestSum" {
-		t.Errorf("wrong func: %s", testFuncs[0])
+	if _, ok := testFuncs["TestSum"]; !ok {
+		t.Errorf("no expected func")
+	}
+}
+
+func TestFindTestFunctions_TestFunction(t *testing.T) {
+	cwd, _ := os.Getwd()
+	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
+	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 67)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(testFuncs) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
+	}
+	if _, ok := testFuncs["TestSum"]; !ok {
+		t.Errorf("no expected func")
+	}
+}
+
+func TestFindTestFunctions_IdentityNotFound(t *testing.T) {
+	cwd, _ := os.Getwd()
+	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
+	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(testFuncs) != 0 {
+		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
+	}
+}
+
+func TestFindTestFunctions_NoGoDirectory(t *testing.T) {
+	cwd, _ := os.Getwd()
+	pkgPath := filepath.Join(cwd, "testdata", "no_go_files", "README.md")
+	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(testFuncs) != 0 {
+		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
 	}
 }
 
@@ -50,15 +89,6 @@ func TestNewParsedPackage(t *testing.T) {
 	}
 	if !findFilename(filepath.Join(pkgPath, "sum_test.go")) {
 		t.Error("no sum_test.go in file set")
-	}
-}
-
-func TestNewParsedPackage_NoGoFiles(t *testing.T) {
-	cwd, _ := os.Getwd()
-	pkgPath := filepath.Join(cwd, "testdata", "no_go_files")
-	_, err := newParsedPackage(&build.Default, pkgPath)
-	if err == nil {
-		t.Fatal("nil err")
 	}
 }
 

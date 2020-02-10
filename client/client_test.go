@@ -74,6 +74,32 @@ func TestTestAction_RelativePath(t *testing.T) {
 	}
 }
 
+func TestTestAction_PathAndOffset(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc(common.TestPath, func(w http.ResponseWriter, r *http.Request) {})
+	server := httptest.NewServer(mux)
+
+	query := "/path/to/test/file:#1"
+	options := client.TestOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://"), TestLogger: &strings.Builder{}}
+	err := client.TestAction(context.Background(), query, options)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestTestAction_InvalidPathAndOffset(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc(common.TestPath, func(w http.ResponseWriter, r *http.Request) {})
+	server := httptest.NewServer(mux)
+
+	query := "/path/to/test/file:#1:#2"
+	options := client.TestOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://"), TestLogger: &strings.Builder{}}
+	err := client.TestAction(context.Background(), query, options)
+	if err == nil {
+		t.Error(err)
+	}
+}
+
 func TestSetupAction(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc(common.SetupPath, func(w http.ResponseWriter, r *http.Request) {})

@@ -15,16 +15,31 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-// `filename` must be abs.
-func FindTestFunctions(ctxt *build.Context, filename string, offset int) ([]string, error) {
+// FindTestFunctions finds the test functions which related to the specified `filename` and offset`. `filename` must be abs.
+// summary:
+// 1. Finds the top-level declaration which encloses the specified offset.
+// 2-1. If the decl is the test function itself, just returns that test function.
+// 2-2. Otherwise, lists the test functions which uses the identity step 1 finds. It only searches for the files in the same package.
+//   For example, if the offset specifies the last line of some non-test function, it finds the name of the function (e.g. `Sum`) first,
+//   and then finds the test functions which directly call the function (e.g. `TestSum1` and `TestSum2`).
+func FindTestFunctions(ctxt *build.Context, filename string, offset int) (map[string]struct{}, error) {
 	pkg, err := newParsedPackage(ctxt, filepath.Dir(filename))
 	if err != nil {
+		if _, ok := err.(*build.NoGoError); ok {
+			return nil, nil
+		}
 		return nil, err
 	}
 
 	id, err := pkg.findEnclosingIdentity(filename, offset)
 	if err != nil {
 		return nil, err
+	}
+
+	if id == nil {
+		return nil, nil
+	} else if id.IsTestFunc() {
+		return map[string]struct{}{id.Name(): struct{}{}}, nil
 	}
 
 	users, err := pkg.findUsers(id)
@@ -39,12 +54,7 @@ func FindTestFunctions(ctxt *build.Context, filename string, offset int) ([]stri
 		}
 	}
 
-	var testFuncs []string
-	for f := range set {
-		testFuncs = append(testFuncs, f)
-	}
-
-	return testFuncs, nil
+	return set, nil
 }
 
 type parsedPackage struct {
@@ -121,7 +131,7 @@ func (p parsedPackage) findEnclosingIdentity(filename string, offset int) (ident
 	for _, n := range nodes {
 		if decl, ok := n.(*ast.FuncDecl); ok {
 			if decl.Recv == nil {
-				return functionIdentity{decl.Name, p.pkg.Scope.Objects[decl.Name.Name]}, nil // decl.Name.Obj is nil
+				return functionIdentity{filename, decl.Name, p.pkg.Scope.Objects[decl.Name.Name]}, nil // decl.Name.Obj is nil
 			}
 
 			receiverType := decl.Recv.List[0].Type
@@ -212,6 +222,7 @@ func (p parsedPackage) findTestFunction(id *ast.Ident) string {
 type identity interface {
 	Match(ast.Node) (*ast.Ident, bool)
 	Name() string
+	IsTestFunc() bool
 }
 
 type defaultIdentity struct {
@@ -231,7 +242,12 @@ func (id defaultIdentity) Name() string {
 	return id.Ident.Name
 }
 
+func (id defaultIdentity) IsTestFunc() bool {
+	return false
+}
+
 type functionIdentity struct {
+	filename string
 	*ast.Ident
 	obj *ast.Object
 }
@@ -247,6 +263,10 @@ func (id functionIdentity) Match(n ast.Node) (*ast.Ident, bool) {
 
 func (id functionIdentity) Name() string {
 	return id.Ident.Name
+}
+
+func (id functionIdentity) IsTestFunc() bool {
+	return strings.HasSuffix(id.filename, "_test.go") && strings.HasPrefix(id.Name(), "Test")
 }
 
 type methodIdentity struct {
@@ -266,4 +286,8 @@ func (id methodIdentity) Match(n ast.Node) (*ast.Ident, bool) {
 
 func (id methodIdentity) Name() string {
 	return fmt.Sprintf("%s.%s", id.receiverTypename, id.functionName)
+}
+
+func (id methodIdentity) IsTestFunc() bool {
+	return false
 }

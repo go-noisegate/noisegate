@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"go/build"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -42,8 +43,9 @@ const (
 	JobStatusFailed
 )
 
-// NewJob returns the new job.
-func NewJob(pkg *Package, dependencyDepth int) (*Job, error) {
+// NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
+// where the package is changed. If `changedFilename` is not empty, affected test functions are executed first.
+func NewJob(pkg *Package, changedFilename string, changedOffset, dependencyDepth int) (*Job, error) {
 	job := &Job{
 		ID:              generateID(),
 		DirPath:         pkg.path,
@@ -57,6 +59,7 @@ func NewJob(pkg *Package, dependencyDepth int) (*Job, error) {
 	errCh := make(chan error)
 	binaryPathCh := make(chan string, 1) // to avoid go routine leaks
 	funcNamesCh := make(chan []string, 1)
+	affectedFuncsCh := make(chan map[string]struct{}, 1)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -87,6 +90,18 @@ func NewJob(pkg *Package, dependencyDepth int) (*Job, error) {
 		funcNamesCh <- testFuncNames
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var affectedTestFuncs map[string]struct{}
+		var err error
+		if changedFilename != "" {
+			affectedTestFuncs, err = FindTestFunctions(&build.Default, changedFilename, changedOffset)
+		}
+		errCh <- err
+		affectedFuncsCh <- affectedTestFuncs
+	}()
+
 	go func() {
 		wg.Wait()
 		close(errCh)
@@ -98,8 +113,10 @@ func NewJob(pkg *Package, dependencyDepth int) (*Job, error) {
 	}
 	// assumes the go routines send the data anyway
 	job.TestBinaryPath = <-binaryPathCh
+	affectedFuncs := <-affectedFuncsCh
 	for _, testFuncName := range <-funcNamesCh {
-		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Job: job})
+		_, affected := affectedFuncs[testFuncName]
+		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Affected: affected, Job: job})
 	}
 
 	if err != nil {
@@ -258,11 +275,11 @@ const (
 )
 
 // NewTaskSet returns the new task set.
-func NewTaskSet(id int, job *Job) *TaskSet {
+func NewTaskSet(id int, jobID int64) *TaskSet {
 	return &TaskSet{
 		ID:         id,
 		Status:     TaskSetStatusCreated,
-		LogPath:    filepath.Join(sharedDir, "log", "job", fmt.Sprintf("%d_%d", job.ID, id)),
+		LogPath:    filepath.Join(sharedDir, "log", "job", fmt.Sprintf("%d_%d", jobID, id)),
 		finishedCh: make(chan struct{}),
 	}
 }
@@ -293,6 +310,7 @@ func (s *TaskSet) WaitFinished() {
 type Task struct {
 	TestFunction string
 	Status       TaskStatus
+	Affected     bool
 	ElapsedTime  time.Duration
 	Job          *Job
 }
@@ -332,13 +350,13 @@ type taskWithExecTime struct {
 }
 
 // Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(job *Job, numPartitions int) []*TaskSet {
-	sortedTasks, noProfileTasks := p.sortByExecTime(job.Tasks)
+func (p LPTPartitioner) Partition(tasks []*Task, jobID int64, numPartitions int) []*TaskSet {
+	sortedTasks, noProfileTasks := p.sortByExecTime(tasks)
 
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
 	taskSets := make([]*TaskSet, numPartitions)
 	for i := 0; i < numPartitions; i++ {
-		taskSets[i] = NewTaskSet(i, job)
+		taskSets[i] = NewTaskSet(i, jobID)
 	}
 	totalExecTimes := make([]time.Duration, numPartitions)
 	for _, t := range sortedTasks {

@@ -9,6 +9,7 @@ import (
 const maxDepth = 10
 
 // taskSetScheduler maintains the set of the runnable task sets.
+// Fixed-priority + FIFO scheduler.
 type taskSetScheduler struct {
 	runnables [maxDepth][]*TaskSet
 	mtx       sync.Mutex

@@ -140,11 +140,13 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pathDir := input.Path
+	changedFilename := ""
 	if !fi.IsDir() {
 		pathDir = filepath.Dir(input.Path)
+		changedFilename = input.Path
 	}
 
-	log.Printf("test %s\n", input.Path)
+	log.Printf("test %s#%d\n", input.Path, input.Offset)
 
 	if err := s.packageManager.Watch(pathDir); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -153,7 +155,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, _ := s.packageManager.Find(pathDir)
 
-	job, err := NewJob(pkg, 0)
+	job, err := NewJob(pkg, changedFilename, input.Offset, 0)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)

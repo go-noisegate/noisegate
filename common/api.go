@@ -16,7 +16,8 @@ const (
 
 // TestRequest represents the input data to the test API.
 type TestRequest struct {
-	Path string `json:"path"`
+	Path   string `json:"path"`
+	Offset int    `json:"offset"`
 }
 
 // SetupRequest represents the input data to the setup API.

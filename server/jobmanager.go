@@ -51,7 +51,19 @@ func (m *JobManager) Partition(job *Job, numPartitions int) error {
 		return errors.New("the number of partitions is 0")
 	}
 
-	job.TaskSets = m.partitioner.Partition(job, numPartitions)
+	var affectedTasks, notAffectedTasks []*Task
+	for _, t := range job.Tasks {
+		if t.Affected {
+			affectedTasks = append(affectedTasks, t)
+		} else {
+			notAffectedTasks = append(notAffectedTasks, t)
+		}
+	}
+
+	if len(affectedTasks) > 0 {
+		job.TaskSets = m.partitioner.Partition(affectedTasks, job.ID, numPartitions)
+	}
+	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notAffectedTasks, job.ID, numPartitions)...)
 	return nil
 }
 
