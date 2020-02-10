@@ -61,9 +61,9 @@ func (m *JobManager) Partition(job *Job, numPartitions int) error {
 	}
 
 	if len(affectedTasks) > 0 {
-		job.TaskSets = m.partitioner.Partition(affectedTasks, job.ID, numPartitions)
+		job.TaskSets = m.partitioner.Partition(affectedTasks, job.ID, 0, numPartitions)
 	}
-	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notAffectedTasks, job.ID, numPartitions)...)
+	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notAffectedTasks, job.ID, len(job.TaskSets), numPartitions)...)
 	return nil
 }
 

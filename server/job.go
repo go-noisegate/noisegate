@@ -350,13 +350,13 @@ type taskWithExecTime struct {
 }
 
 // Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(tasks []*Task, jobID int64, numPartitions int) []*TaskSet {
+func (p LPTPartitioner) Partition(tasks []*Task, jobID int64, taskSetIDBase, numPartitions int) []*TaskSet {
 	sortedTasks, noProfileTasks := p.sortByExecTime(tasks)
 
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
 	taskSets := make([]*TaskSet, numPartitions)
 	for i := 0; i < numPartitions; i++ {
-		taskSets[i] = NewTaskSet(i, jobID)
+		taskSets[i] = NewTaskSet(taskSetIDBase+i, jobID)
 	}
 	totalExecTimes := make([]time.Duration, numPartitions)
 	for _, t := range sortedTasks {

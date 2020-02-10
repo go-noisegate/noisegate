@@ -95,7 +95,7 @@ func (e Executor) execute(ctx context.Context, taskSet nextTaskSet) error {
 		log.Debugf("time to execute the binary: %v\n", time.Since(start))
 	}()
 
-	cmd := exec.CommandContext(ctx, taskSet.TestBinaryPath, "-test.v", "-test.run", strings.Join(taskSet.TestFunctions, "|"))
+	cmd := exec.CommandContext(ctx, taskSet.TestBinaryPath, "-test.v", "-test.run", "^"+strings.Join(taskSet.TestFunctions, "$|^")+"$")
 	cmd.Dir = taskSet.PackagePath
 
 	logFile, err := os.OpenFile(taskSet.LogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)

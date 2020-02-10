@@ -54,6 +54,14 @@ func FindTestFunctions(ctxt *build.Context, filename string, offset int) (map[st
 		}
 	}
 
+	if log.DebugLogEnabled() {
+		var fs []string
+		for f := range set {
+			fs = append(fs, f)
+		}
+		log.Debugf("%s affects [%v]\n", id.Name(), strings.Join(fs, ", "))
+	}
+
 	return set, nil
 }
 
