@@ -259,8 +259,7 @@ type TaskSet struct {
 	StartedAt, FinishedAt time.Time
 	LogPath               string
 	Tasks                 []*Task
-	WorkerGroupName       string
-	WorkerID              int
+	Worker                *Worker
 	finishedCh            chan struct{}
 }
 
@@ -284,13 +283,14 @@ func NewTaskSet(id int, jobID int64) *TaskSet {
 	}
 }
 
-func (s *TaskSet) Start(groupName string, workerID int) {
+// Start marks the task set as `started`.
+func (s *TaskSet) Start(w *Worker) {
+	s.Worker = w
 	s.StartedAt = time.Now()
-	s.WorkerGroupName = groupName
-	s.WorkerID = workerID
 	s.Status = TaskSetStatusStarted
 }
 
+// Finish marks the task set as `finished`.
 func (s *TaskSet) Finish(successful bool) {
 	s.FinishedAt = time.Now()
 	if successful {
@@ -298,12 +298,6 @@ func (s *TaskSet) Finish(successful bool) {
 	} else {
 		s.Status = TaskSetStatusFailed
 	}
-	close(s.finishedCh)
-}
-
-// WaitFinished waits until the task set finished.
-func (s *TaskSet) WaitFinished() {
-	<-s.finishedCh
 }
 
 // Task represents one test function.

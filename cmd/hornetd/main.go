@@ -29,7 +29,6 @@ func main() {
 
 			opt := workerOptions{
 				numWorkers: c.Int("num-workers"),
-				workerPath: c.String("worker-path"),
 			}
 			return runServer(addr, opt)
 		},
@@ -44,11 +43,6 @@ func main() {
 				Usage: "the number of workers",
 				Value: 4,
 			},
-			&cli.StringFlag{
-				Name:  "worker-path",
-				Usage: "path to the `hornet-worker` binary. If empty, search the PATH directories",
-				Value: "",
-			},
 		},
 		HideHelp: true, // to hide the `COMMANDS` section in the help message.
 	}
@@ -61,7 +55,6 @@ func main() {
 
 type workerOptions struct {
 	numWorkers int
-	workerPath string
 }
 
 func runServer(addr string, opt workerOptions) error {
@@ -75,19 +68,7 @@ func runServer(addr string, opt workerOptions) error {
 	defer os.RemoveAll(sharedDir)
 	server.SetUpSharedDir(sharedDir)
 
-	workerManager := &server.WorkerManager{
-		ServerAddress:   addr,
-		WorkerBinPath:   opt.workerPath,
-		WorkerGroupName: filepath.Base(sharedDir),
-	}
-	log.Printf("start %d workers\n", opt.numWorkers)
-	for i := 0; i < opt.numWorkers; i++ {
-		if err := workerManager.AddWorker(); err != nil {
-			return fmt.Errorf("failed to add the worker #%d: %w", i, err)
-		}
-	}
-
-	server := server.NewHornetServer(addr, workerManager)
+	server := server.NewHornetServer(addr, opt.numWorkers)
 	shutdownDoneCh := make(chan struct{})
 	go func() {
 		sigCh := make(chan os.Signal, 1)

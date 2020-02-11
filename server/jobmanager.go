@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -13,7 +14,6 @@ import (
 
 // JobManager manages the jobs.
 type JobManager struct {
-	scheduler   taskSetScheduler
 	profiler    *SimpleProfiler
 	partitioner LPTPartitioner
 	jobs        map[int64]*Job
@@ -23,34 +23,38 @@ type JobManager struct {
 // NewJobManager returns the new job manager.
 func NewJobManager() *JobManager {
 	profiler := NewSimpleProfiler()
-	// TODO: LPT is generally good, but maybe tests associated with the changed file or previously failed tests should be executed first.
-	partitioner := NewLPTPartitioner(profiler)
 	return &JobManager{
 		profiler:    profiler,
-		partitioner: partitioner,
+		partitioner: NewLPTPartitioner(profiler),
 		jobs:        make(map[int64]*Job),
 	}
 }
 
-// NextTaskSet returns the runnable task set.
-func (m *JobManager) NextTaskSet(groupName string, workerID int) (job *Job, taskSet *TaskSet, err error) {
-	taskSet, err = m.scheduler.Next()
-	if err != nil {
-		return
+// StartJob starts the job.
+func (m *JobManager) StartJob(ctx context.Context, job *Job, numPartitions int) error {
+	if err := m.partition(job, numPartitions); err != nil {
+		return err
 	}
-	// assumes this task set has at least one task
-	job = taskSet.Tasks[0].Job
 
-	taskSet.Start(groupName, workerID)
-	return
+	log.Debugf("starts %d task set(s)\n", len(job.TaskSets))
+	for _, taskSet := range job.TaskSets {
+		w := NewWorker(ctx, job, taskSet)
+		taskSet.Start(w)
+		w.Start()
+	}
+
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	m.jobs[job.ID] = job
+	return nil
 }
 
-// Partition partitions the job into the task sets.
-func (m *JobManager) Partition(job *Job, numPartitions int) error {
+func (m *JobManager) partition(job *Job, numPartitions int) error {
 	if numPartitions == 0 && len(job.Tasks) != 0 {
 		return errors.New("the number of partitions is 0")
 	}
 
+	// TODO: partitioner should handle this.
 	var affectedTasks, notAffectedTasks []*Task
 	for _, t := range job.Tasks {
 		if t.Affected {
@@ -67,64 +71,7 @@ func (m *JobManager) Partition(job *Job, numPartitions int) error {
 	return nil
 }
 
-// AddJob partitions the job into the task sets and adds them to the scheduler.
-func (m *JobManager) AddJob(job *Job) {
-	log.Debugf("add the %d task set(s)\n", len(job.TaskSets))
-	for _, taskSet := range job.TaskSets {
-		if len(taskSet.Tasks) == 0 {
-			taskSet.Start("", 0)
-			taskSet.Finish(true)
-			continue
-		}
-
-		if err := m.scheduler.Add(taskSet, job.DependencyDepth); err != nil {
-			log.Printf("failed to add the new task set %v: %v", taskSet, err)
-		}
-	}
-
-	if job.CanFinish() {
-		// if all task sets have no tasks, we can finish the job here.
-		job.Finish()
-		return
-	}
-
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-	m.jobs[job.ID] = job
-}
-
-// ReportResult reports the result and updates the statuses.
-func (m *JobManager) ReportResult(jobID int64, taskSetID int, successful bool) error {
-	job, err := m.Find(jobID)
-	if err != nil {
-		return err
-	}
-
-	taskSet := job.TaskSets[taskSetID]
-	rawProfiles := m.parseGoTestLog(taskSet.LogPath)
-	for _, t := range taskSet.Tasks {
-		p, ok := rawProfiles[t.TestFunction]
-		if ok {
-			m.profiler.Add(job.DirPath, t.TestFunction, p.elapsedTime)
-			t.Finish(p.successful, p.elapsedTime)
-		} else {
-			log.Printf("failed to detect the result of %s. Assume it's same as the result of the task set: %v\n", t.TestFunction, successful)
-			t.Finish(successful, 0)
-		}
-	}
-
-	taskSet.Finish(successful)
-
-	m.mtx.Lock()
-	defer m.mtx.Unlock()
-	if job.CanFinish() {
-		job.Finish()
-		delete(m.jobs, jobID)
-	}
-	return nil
-}
-
-// ReportResult reports the result and updates the statuses.
+// Find finds the specified job.
 func (m *JobManager) Find(jobID int64) (*Job, error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
@@ -134,6 +81,40 @@ func (m *JobManager) Find(jobID int64) (*Job, error) {
 		return nil, fmt.Errorf("failed to find the job %d", jobID)
 	}
 	return job, nil
+}
+
+// WaitJob waits the job finished.
+func (m *JobManager) WaitJob(jobID int64) error {
+	job, err := m.Find(jobID)
+	if err != nil {
+		return err
+	}
+
+	for _, taskSet := range job.TaskSets {
+		successful, _ := taskSet.Worker.Wait()
+		taskSet.Finish(successful)
+		fmt.Printf("successful: %v\n", successful)
+
+		rawProfiles := m.parseGoTestLog(taskSet.LogPath)
+		for _, t := range taskSet.Tasks {
+			p, ok := rawProfiles[t.TestFunction]
+			if ok {
+				m.profiler.Add(job.DirPath, t.TestFunction, p.elapsedTime)
+				t.Finish(p.successful, p.elapsedTime)
+			} else {
+				successful := taskSet.Status == TaskSetStatusSuccessful
+				log.Printf("failed to detect the result of %s. Assume it's same as the result of the task set: %v\n", t.TestFunction, successful)
+				t.Finish(successful, 0)
+			}
+		}
+	}
+
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	job.Finish()
+	delete(m.jobs, jobID)
+
+	return nil
 }
 
 type rawProfile struct {

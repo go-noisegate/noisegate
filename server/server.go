@@ -26,7 +26,6 @@ func SetUpSharedDir(dir string) {
 	os.Mkdir(filepath.Join(sharedDir, "lib"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "log"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "log", "job"), os.ModePerm)
-	os.Mkdir(filepath.Join(sharedDir, "log", "worker"), os.ModePerm)
 	os.Mkdir(filepath.Join(sharedDir, "src"), os.ModePerm)
 
 	log.Debugf("shared dir: %s", sharedDir)
@@ -35,26 +34,24 @@ func SetUpSharedDir(dir string) {
 // HornetServer serves the APIs for the cli client.
 type HornetServer struct {
 	*http.Server
-	jobManager     *JobManager
-	workerManager  *WorkerManager
-	packageManager *PackageManager
-	depthLimit     int
+	jobManager        *JobManager
+	packageManager    *PackageManager
+	defaultNumWorkers int
+	depthLimit        int
 }
 
 // NewHornetServer returns the new hornet server.
 // We can use only one server instance in the process even if the address is different.
-func NewHornetServer(addr string, workerManager *WorkerManager) HornetServer {
+func NewHornetServer(addr string, defaultNumWorkers int) HornetServer {
 	s := HornetServer{
-		jobManager:     NewJobManager(),
-		workerManager:  workerManager,
-		packageManager: NewPackageManager(),
+		jobManager:        NewJobManager(),
+		packageManager:    NewPackageManager(),
+		defaultNumWorkers: defaultNumWorkers,
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(common.TestPath, s.handleTest)
 	mux.HandleFunc(common.SetupPath, s.handleSetup)
-	mux.HandleFunc(common.NextTaskSetPath, s.handleNextTaskSet)
-	mux.HandleFunc(common.ReportResultPath, s.handleReportResult)
 	s.Server = &http.Server{
 		Handler: mux,
 		Addr:    addr,
@@ -62,9 +59,8 @@ func NewHornetServer(addr string, workerManager *WorkerManager) HornetServer {
 	return s
 }
 
-// Shutdown shutdowns the http server and workers.
+// Shutdown shutdowns the http server.
 func (s HornetServer) Shutdown(ctx context.Context) error {
-	s.workerManager.RemoveWorkers()
 	return s.Server.Shutdown(ctx)
 }
 
@@ -146,7 +142,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		changedFilename = input.Path
 	}
 
-	log.Printf("test %s#%d\n", input.Path, input.Offset)
+	log.Printf("test %s:#%d\n", input.Path, input.Offset)
 
 	if err := s.packageManager.Watch(pathDir); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -164,35 +160,27 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.jobManager.Partition(job, s.workerManager.NumWorkers()); err != nil {
+	log.Debugf("start the job id %d\n", job.ID)
+	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		msg := fmt.Sprintf("failed to divide the tests: %v\n", err)
+		msg := fmt.Sprintf("failed to start the job: %v\n", err)
 		fmt.Fprint(w, msg)
 		log.Debug(msg)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
-	s.runAndWaitJob(w, job)
+	s.WaitJob(w, job)
 }
 
-func (s HornetServer) runAndWaitJob(w http.ResponseWriter, job *Job) {
-	log.Debugf("add the job id %d\n", job.ID)
-	s.jobManager.AddJob(job)
-
-	ch := make(chan int)
-	for i := range job.TaskSets {
-		go func(i int) {
-			job.TaskSets[i].WaitFinished()
-			ch <- i
-		}(i)
+func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
+	if err := s.jobManager.WaitJob(job.ID); err != nil {
+		fmt.Fprintf(w, "failed to get the job result: %v", err)
 	}
 
-	for range job.TaskSets {
-		i := <-ch
-		s.writeTaskSetLog(w, job, job.TaskSets[i])
+	for _, taskSet := range job.TaskSets {
+		s.writeTaskSetLog(w, job, taskSet)
 	}
-
-	job.WaitFinished()
 
 	result := "FAIL"
 	if job.Status == JobStatusSuccessful {
@@ -236,74 +224,5 @@ func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {
 		fmt.Fprintf(w, "(no test log)\n")
 	} else {
 		fmt.Fprintf(w, "%s\n", string(content))
-	}
-}
-
-// handleNextTaskSet handles the next task set request.
-func (s HornetServer) handleNextTaskSet(w http.ResponseWriter, r *http.Request) {
-	var req common.NextTaskSetRequest
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if s.workerManager.WorkerGroupName != req.WorkerGroupName {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("invalid group name\n"))
-		return
-	}
-
-	job, taskSet, err := s.jobManager.NextTaskSet(req.WorkerGroupName, req.WorkerID)
-	if err != nil {
-		if err == errNoTaskSet {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			log.Printf("failed to get the next task set: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-		return
-	}
-
-	worker := s.workerManager.workers[req.WorkerID]
-	log.Debugf("%s handles the task set %d\n", worker.Name, taskSet.ID)
-
-	resp := &common.NextTaskSetResponse{
-		JobID:          job.ID,
-		TaskSetID:      taskSet.ID,
-		LogPath:        taskSet.LogPath,
-		TestBinaryPath: job.TestBinaryPath,
-		PackagePath:    job.Package.path,
-	}
-	for _, t := range taskSet.Tasks {
-		resp.TestFunctions = append(resp.TestFunctions, t.TestFunction)
-	}
-
-	enc := json.NewEncoder(w)
-	if err := enc.Encode(&resp); err != nil {
-		log.Printf("failed to encode the response: %v\n", err)
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
-// handleReportResult handles the report result request.
-func (s HornetServer) handleReportResult(w http.ResponseWriter, r *http.Request) {
-	var req common.ReportResultRequest
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if s.workerManager.WorkerGroupName != req.WorkerGroupName {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("invalid group name\n"))
-		return
-	}
-
-	if err := s.jobManager.ReportResult(req.JobID, req.TaskSetID, req.Successful); err != nil {
-		log.Printf("failed to report the result: %v\n", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
 	}
 }

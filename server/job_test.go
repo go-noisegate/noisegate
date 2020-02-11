@@ -122,18 +122,19 @@ func TestJob_Finish(t *testing.T) {
 
 func TestTaskSet_Start(t *testing.T) {
 	set := NewTaskSet(1, 1)
-	set.Start("g1", 1)
+	w := &Worker{}
+	set.Start(w)
 	if set.Status != TaskSetStatusStarted {
 		t.Errorf("wrong status: %v", set.Status)
-	}
-	if set.WorkerID != 1 {
-		t.Errorf("wrong worker: %d", set.WorkerID)
 	}
 	if set.StartedAt.IsZero() {
 		t.Errorf("StartedAt is zero")
 	}
 	if set.LogPath != filepath.Join(sharedDir, "log", "job", "1_1") {
 		t.Errorf("wrong log path: %s", set.LogPath)
+	}
+	if set.Worker != w {
+		t.Errorf("wrong worker: %v", set.Worker)
 	}
 }
 
@@ -143,7 +144,9 @@ func TestTaskSet_Finish(t *testing.T) {
 	if set.Status != TaskSetStatusSuccessful {
 		t.Errorf("wrong status: %v", set.Status)
 	}
-	set.WaitFinished()
+	if set.FinishedAt.IsZero() {
+		t.Errorf("0 FinishedAt")
+	}
 }
 
 func TestTask_Finish(t *testing.T) {
