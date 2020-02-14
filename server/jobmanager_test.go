@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"testing"
 )
@@ -56,7 +57,7 @@ func TestJobManager_StartAndWaitJob(t *testing.T) {
 	}
 
 	manager := NewJobManager()
-	manager.StartJob(context.Background(), job, 2)
+	manager.StartJob(context.Background(), job, 2, &bytes.Buffer{})
 	if _, ok := manager.jobs[job.ID]; !ok {
 		t.Errorf("job is not stored: %d", job.ID)
 	}
@@ -93,7 +94,7 @@ func TestJobManager_StartAndWaitJob_Failed(t *testing.T) {
 	}
 
 	manager := NewJobManager()
-	manager.StartJob(context.Background(), job, 1)
+	manager.StartJob(context.Background(), job, 1, &bytes.Buffer{})
 
 	if err := manager.WaitJob(job.ID); err != nil {
 		t.Fatal(err)

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/ks888/hornet/common"
@@ -159,7 +159,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debugf("start the job id %d\n", job.ID)
-	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers); err != nil {
+	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers, newFlushWriter(w)); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to start the job: %v\n", err)
 		fmt.Fprint(w, msg)
@@ -172,27 +172,30 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
-	doneCh := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-doneCh:
-				break
-			case testResult := <-job.testResultCh:
-				w.Write([]byte(strings.Join(testResult.Output, "")))
-				// Note that the data is not flushed if \n is not appended.
-				w.(http.Flusher).Flush()
-			}
-		}
-	}()
 	if err := s.jobManager.WaitJob(job.ID); err != nil {
 		fmt.Fprintf(w, "failed to get the job result: %v", err)
 	}
-	close(doneCh)
 
 	result := "FAIL"
 	if job.Status == JobStatusSuccessful {
 		result = "PASS"
 	}
 	fmt.Fprintf(w, "%s: Job#%d (%s) (%v)\n", result, job.ID, job.DirPath, job.FinishedAt.Sub(job.CreatedAt))
+}
+
+type flushWriter struct {
+	flusher http.Flusher
+	writer  io.Writer
+}
+
+func newFlushWriter(w http.ResponseWriter) flushWriter {
+	return flushWriter{
+		flusher: w.(http.Flusher),
+		writer:  w,
+	}
+}
+
+func (w flushWriter) Write(p []byte) (int, error) {
+	defer w.flusher.Flush()
+	return w.writer.Write(p)
 }

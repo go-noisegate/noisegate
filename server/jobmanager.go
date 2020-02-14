@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,10 +32,11 @@ func NewJobManager() *JobManager {
 }
 
 // StartJob starts the job.
-func (m *JobManager) StartJob(ctx context.Context, job *Job, numPartitions int) error {
+func (m *JobManager) StartJob(ctx context.Context, job *Job, numPartitions int, testResultWriter io.Writer) error {
 	if err := m.partition(job, numPartitions); err != nil {
 		return err
 	}
+	go m.testResultHandler(job, testResultWriter)
 
 	log.Debugf("starts %d task set(s)\n", len(job.TaskSets))
 	for _, taskSet := range job.TaskSets {
@@ -74,6 +76,35 @@ func (m *JobManager) partition(job *Job, numPartitions int) error {
 	return nil
 }
 
+var elapsedTimeRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL|SKIP|BENCH): (.+) \(([0-9.]+s)\)$`)
+
+func (m *JobManager) testResultHandler(job *Job, w io.Writer) {
+	for {
+		select {
+		case <-job.finishedCh:
+			break
+		case testResult := <-job.testResultCh:
+			output := strings.Join(testResult.Output, "")
+			w.Write([]byte(output))
+
+			elapsedTime := time.Duration(-1)
+			submatch := elapsedTimeRegexp.FindStringSubmatch(output)
+			if len(submatch) > 1 {
+				if d, err := time.ParseDuration(submatch[1]); err == nil {
+					elapsedTime = d
+					m.profiler.Add(job.DirPath, testResult.TestName, elapsedTime)
+				}
+			}
+
+			for _, t := range job.Tasks {
+				if t.TestFunction == testResult.TestName {
+					t.Finish(testResult.Successful, elapsedTime)
+				}
+			}
+		}
+	}
+}
+
 // Find finds the specified job.
 func (m *JobManager) Find(jobID int64) (*Job, error) {
 	m.mtx.Lock()
@@ -100,19 +131,6 @@ func (m *JobManager) WaitJob(jobID int64) error {
 		}
 		successful, _ := taskSet.Worker.Wait()
 		taskSet.Finish(successful)
-
-		rawProfiles := m.parseGoTestLog(taskSet.LogPath)
-		for _, t := range taskSet.Tasks {
-			p, ok := rawProfiles[t.TestFunction]
-			if ok {
-				m.profiler.Add(job.DirPath, t.TestFunction, p.elapsedTime)
-				t.Finish(p.successful, p.elapsedTime)
-			} else {
-				successful := taskSet.Status == TaskSetStatusSuccessful
-				log.Printf("failed to detect the result of %s. Assume it's same as the result of the task set: %v\n", t.TestFunction, successful)
-				t.Finish(successful, 0)
-			}
-		}
 	}
 
 	m.mtx.Lock()
@@ -121,39 +139,4 @@ func (m *JobManager) WaitJob(jobID int64) error {
 	delete(m.jobs, jobID)
 
 	return nil
-}
-
-type rawProfile struct {
-	testFuncName string
-	successful   bool
-	elapsedTime  time.Duration
-}
-
-var goTestLogRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL): (.+) \(([0-9.]+s)\)$`)
-
-func (m *JobManager) parseGoTestLog(logPath string) map[string]rawProfile {
-	profiles := make(map[string]rawProfile)
-
-	goTestLog, err := ioutil.ReadFile(logPath)
-	if err != nil {
-		log.Debugf("failed to read the log file: %v", err)
-		return profiles
-	}
-
-	submatches := goTestLogRegexp.FindAllStringSubmatch(string(goTestLog), -1)
-	for _, submatch := range submatches {
-		successful := true
-		if submatch[1] == "FAIL" {
-			successful = false
-		}
-		funcName := submatch[2]
-		d, err := time.ParseDuration(submatch[3])
-		if err != nil {
-			log.Printf("failed to parse go test log: %v", err)
-			continue
-		}
-
-		profiles[funcName] = rawProfile{funcName, successful, d}
-	}
-	return profiles
 }
