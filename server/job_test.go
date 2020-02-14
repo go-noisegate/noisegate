@@ -121,7 +121,7 @@ func TestJob_Finish(t *testing.T) {
 }
 
 func TestTaskSet_Start(t *testing.T) {
-	set := NewTaskSet(1, 1)
+	set := NewTaskSet(1, &Job{ID: 1})
 	w := &Worker{}
 	set.Start(w)
 	if set.Status != TaskSetStatusStarted {
@@ -139,7 +139,7 @@ func TestTaskSet_Start(t *testing.T) {
 }
 
 func TestTaskSet_Finish(t *testing.T) {
-	set := NewTaskSet(1, 1)
+	set := NewTaskSet(1, &Job{ID: 1})
 	set.Finish(true)
 	if set.Status != TaskSetStatusSuccessful {
 		t.Errorf("wrong status: %v", set.Status)
@@ -169,11 +169,11 @@ func TestLPTPartition(t *testing.T) {
 
 	job := &Job{DirPath: "/path"}
 	job.Tasks = []*Task{
-		{TestFunction: "f1", Job: job},
-		{TestFunction: "f2", Job: job},
-		{TestFunction: "f3", Job: job},
+		{TestFunction: "f1"},
+		{TestFunction: "f2"},
+		{TestFunction: "f3"},
 	}
-	taskSets := p.Partition(job.Tasks, job.ID, 1, 2)
+	taskSets := p.Partition(job.Tasks, job, 1, 2)
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))
 	}
@@ -181,7 +181,7 @@ func TestLPTPartition(t *testing.T) {
 		t.Fatalf("wrong id: %d", taskSets[0].ID)
 	}
 	if len(taskSets[0].Tasks) != 1 {
-		t.Fatalf("wrong number of tasks: %d", len(taskSets[0].Tasks))
+		t.Errorf("wrong number of tasks: %d", len(taskSets[0].Tasks))
 	}
 	if *taskSets[0].Tasks[0] != *job.Tasks[1] {
 		t.Errorf("wrong task ptr: %v", taskSets[0].Tasks[0])
@@ -199,14 +199,14 @@ func TestLPTPartition(t *testing.T) {
 }
 
 func TestLPTPartition_EmptyProfile(t *testing.T) {
-	job := &Job{}
+	job := &Job{ID: 1}
 	job.Tasks = []*Task{
 		{TestFunction: "f1", Job: job},
 		{TestFunction: "f2", Job: job},
 		{TestFunction: "f3", Job: job},
 	}
 	p := NewLPTPartitioner(NewSimpleProfiler())
-	taskSets := p.Partition(job.Tasks, job.ID, 0, 2)
+	taskSets := p.Partition(job.Tasks, job, 0, 2)
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))
 	}

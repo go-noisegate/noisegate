@@ -39,8 +39,11 @@ func (m *JobManager) StartJob(ctx context.Context, job *Job, numPartitions int) 
 	log.Debugf("starts %d task set(s)\n", len(job.TaskSets))
 	for _, taskSet := range job.TaskSets {
 		w := NewWorker(ctx, job, taskSet)
+		if err := w.Start(); err != nil {
+			log.Printf("failed to start the worker: %v", err)
+			continue
+		}
 		taskSet.Start(w)
-		w.Start()
 	}
 
 	m.mtx.Lock()
@@ -65,9 +68,9 @@ func (m *JobManager) partition(job *Job, numPartitions int) error {
 	}
 
 	if len(affectedTasks) > 0 {
-		job.TaskSets = m.partitioner.Partition(affectedTasks, job.ID, 0, numPartitions)
+		job.TaskSets = m.partitioner.Partition(affectedTasks, job, 0, numPartitions)
 	}
-	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notAffectedTasks, job.ID, len(job.TaskSets), numPartitions)...)
+	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notAffectedTasks, job, len(job.TaskSets), numPartitions)...)
 	return nil
 }
 
@@ -91,9 +94,12 @@ func (m *JobManager) WaitJob(jobID int64) error {
 	}
 
 	for _, taskSet := range job.TaskSets {
+		if taskSet.Worker == nil {
+			taskSet.Finish(false)
+			continue
+		}
 		successful, _ := taskSet.Worker.Wait()
 		taskSet.Finish(successful)
-		fmt.Printf("successful: %v\n", successful)
 
 		rawProfiles := m.parseGoTestLog(taskSet.LogPath)
 		for _, t := range taskSet.Tasks {

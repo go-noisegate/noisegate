@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go/build"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ks888/hornet/common"
@@ -174,55 +172,27 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
+	doneCh := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-doneCh:
+				break
+			case testResult := <-job.testResultCh:
+				w.Write([]byte(strings.Join(testResult.Output, "")))
+				// Note that the data is not flushed if \n is not appended.
+				w.(http.Flusher).Flush()
+			}
+		}
+	}()
 	if err := s.jobManager.WaitJob(job.ID); err != nil {
 		fmt.Fprintf(w, "failed to get the job result: %v", err)
 	}
-
-	for _, taskSet := range job.TaskSets {
-		s.writeTaskSetLog(w, job, taskSet)
-	}
+	close(doneCh)
 
 	result := "FAIL"
 	if job.Status == JobStatusSuccessful {
 		result = "PASS"
 	}
 	fmt.Fprintf(w, "%s: Job#%d (%s) (%v)\n", result, job.ID, job.DirPath, job.FinishedAt.Sub(job.CreatedAt))
-}
-
-// asyncBuildImportGraph builds the import graph and returns the func to get the built import graph.
-// The returned func returns immediately if the import graph is available. Wait otherwise.
-func (s HornetServer) asyncBuildImportGraph(path string) (getImportGraph func() *ImportGraph) {
-	importGraphCh := make(chan *ImportGraph, 1)
-	go func() {
-		repoRoot := findRepoRoot(path)
-		ctxt := &build.Default
-		importGraph := BuildImportGraph(ctxt, repoRoot)
-		importGraphCh <- &importGraph
-	}()
-
-	start := time.Now()
-	var importGraph *ImportGraph
-	return func() *ImportGraph {
-		if importGraph == nil {
-			importGraph = <-importGraphCh
-			log.Debugf("time to build the import graph: %v\n", time.Since(start))
-		}
-		return importGraph
-	}
-}
-
-func (s HornetServer) writeTaskSetLog(w io.Writer, job *Job, taskSet *TaskSet) {
-	result := "FAIL"
-	if taskSet.Status == TaskSetStatusSuccessful {
-		result = "PASS"
-	}
-	elapsedTime := taskSet.FinishedAt.Sub(taskSet.StartedAt)
-	fmt.Fprintf(w, "%s: Job#%d/TaskSet#%d (%s) (%v)\n", result, job.ID, taskSet.ID, job.DirPath, elapsedTime)
-	content, err := ioutil.ReadFile(taskSet.LogPath)
-	if err != nil {
-		log.Debugf("failed to read the log file: %v\n", err)
-		fmt.Fprintf(w, "(no test log)\n")
-	} else {
-		fmt.Fprintf(w, "%s\n", string(content))
-	}
 }

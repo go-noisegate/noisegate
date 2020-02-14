@@ -31,6 +31,7 @@ type Job struct {
 	DependencyDepth       int
 	TaskSets              []*TaskSet
 	Tasks                 []*Task
+	testResultCh          chan TestResult
 	finishedCh            chan struct{}
 }
 
@@ -53,6 +54,7 @@ func NewJob(pkg *Package, changedFilename string, changedOffset, dependencyDepth
 		Status:          JobStatusCreated,
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
+		testResultCh:    make(chan TestResult),
 		finishedCh:      make(chan struct{}),
 	}
 
@@ -259,6 +261,7 @@ type TaskSet struct {
 	StartedAt, FinishedAt time.Time
 	LogPath               string
 	Tasks                 []*Task
+	Job                   *Job
 	Worker                *Worker
 	finishedCh            chan struct{}
 }
@@ -274,16 +277,17 @@ const (
 )
 
 // NewTaskSet returns the new task set.
-func NewTaskSet(id int, jobID int64) *TaskSet {
+func NewTaskSet(id int, job *Job) *TaskSet {
 	return &TaskSet{
 		ID:         id,
 		Status:     TaskSetStatusCreated,
-		LogPath:    filepath.Join(sharedDir, "log", "job", fmt.Sprintf("%d_%d", jobID, id)),
+		LogPath:    filepath.Join(sharedDir, "log", "job", fmt.Sprintf("%d_%d", job.ID, id)),
+		Job:        job,
 		finishedCh: make(chan struct{}),
 	}
 }
 
-// Start marks the task set as `started`.
+// Start starts the worker task set as `started`.
 func (s *TaskSet) Start(w *Worker) {
 	s.Worker = w
 	s.StartedAt = time.Now()
@@ -328,6 +332,14 @@ func (t *Task) Finish(successful bool, elapsedTime time.Duration) {
 	t.ElapsedTime = elapsedTime
 }
 
+// TestResult represents the test result of one test function.
+type TestResult struct {
+	TestName    string
+	Successful  bool
+	ElapsedTime time.Duration
+	Output      []string
+}
+
 // LPTPartitioner is the partitioner based on the longest processing time algorithm.
 type LPTPartitioner struct {
 	profiler *SimpleProfiler
@@ -344,13 +356,13 @@ type taskWithExecTime struct {
 }
 
 // Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(tasks []*Task, jobID int64, taskSetIDBase, numPartitions int) []*TaskSet {
-	sortedTasks, noProfileTasks := p.sortByExecTime(tasks)
+func (p LPTPartitioner) Partition(tasks []*Task, job *Job, taskSetIDBase, numPartitions int) []*TaskSet {
+	sortedTasks, noProfileTasks := p.sortByExecTime(tasks, job)
 
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
 	taskSets := make([]*TaskSet, numPartitions)
 	for i := 0; i < numPartitions; i++ {
-		taskSets[i] = NewTaskSet(taskSetIDBase+i, jobID)
+		taskSets[i] = NewTaskSet(taskSetIDBase+i, job)
 	}
 	totalExecTimes := make([]time.Duration, numPartitions)
 	for _, t := range sortedTasks {
@@ -369,9 +381,9 @@ func (p LPTPartitioner) Partition(tasks []*Task, jobID int64, taskSetIDBase, num
 	return taskSets
 }
 
-func (p LPTPartitioner) sortByExecTime(tasks []*Task) (sorted []taskWithExecTime, noProfile []*Task) {
+func (p LPTPartitioner) sortByExecTime(tasks []*Task, job *Job) (sorted []taskWithExecTime, noProfile []*Task) {
 	for i := range tasks {
-		execTime := p.profiler.ExpectExecTime(tasks[i].Job.DirPath, tasks[i].TestFunction)
+		execTime := p.profiler.ExpectExecTime(job.DirPath, tasks[i].TestFunction)
 		if execTime == 0 {
 			noProfile = append(noProfile, tasks[i])
 			continue
