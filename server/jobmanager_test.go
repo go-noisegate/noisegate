@@ -3,7 +3,9 @@ package server
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestJobManager_Partition(t *testing.T) {
@@ -101,5 +103,54 @@ func TestJobManager_StartAndWaitJob_Failed(t *testing.T) {
 	}
 	if job.Status != JobStatusFailed {
 		t.Errorf("unexpected job status: %v", job.Status)
+	}
+}
+
+func TestJobManager_TestResultHandler(t *testing.T) {
+	m := NewJobManager()
+	job := &Job{finishedCh: make(chan struct{}), testResultCh: make(chan TestResult), Tasks: []*Task{{TestFunction: "Test1"}}}
+	buff := &bytes.Buffer{}
+	output := "--- PASS: Test1 (0.01s)\n"
+	go func() {
+		res := TestResult{TestName: "Test1", Successful: true, Output: []string{output}}
+		job.testResultCh <- res
+		close(job.finishedCh)
+	}()
+
+	m.testResultHandler(job, buff)
+	if !strings.Contains(buff.String(), output) {
+		t.Errorf("invalid output: %s", buff.String())
+	}
+
+	if job.Tasks[0].Status != TaskStatusSuccessful {
+		t.Errorf("invalid status: %v", job.Tasks[0].Status)
+	}
+
+	if job.Tasks[0].ElapsedTime != 10*time.Millisecond {
+		t.Errorf("invalid time: %v", job.Tasks[0].ElapsedTime)
+	}
+}
+
+func TestJobManager_HandleAffectedTestFirst(t *testing.T) {
+	m := NewJobManager()
+	job := &Job{
+		finishedCh:   make(chan struct{}),
+		testResultCh: make(chan TestResult),
+		Tasks: []*Task{
+			{TestFunction: "Test1"},
+			{TestFunction: "Test2", Affected: true},
+		},
+	}
+
+	buff := &bytes.Buffer{}
+	go func() {
+		job.testResultCh <- TestResult{TestName: "Test1", Successful: true, Output: []string{"Test1\n"}}
+		job.testResultCh <- TestResult{TestName: "Test2", Successful: true, Output: []string{"Test2\n"}}
+		close(job.finishedCh)
+	}()
+
+	m.testResultHandler(job, buff)
+	if strings.Index(buff.String(), "Test2\n") > strings.Index(buff.String(), "Test1\n") {
+		t.Errorf("invalid output: %s", buff.String())
 	}
 }

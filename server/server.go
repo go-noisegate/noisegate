@@ -167,7 +167,6 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
 	s.WaitJob(w, job)
 }
 

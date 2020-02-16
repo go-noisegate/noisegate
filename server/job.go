@@ -55,7 +55,7 @@ func NewJob(pkg *Package, changedFilename string, changedOffset, dependencyDepth
 		Status:          JobStatusCreated,
 		CreatedAt:       time.Now(),
 		DependencyDepth: dependencyDepth,
-		testResultCh:    make(chan TestResult),
+		testResultCh:    make(chan TestResult), // must be unbuffered to avoid the lost result.
 		finishedCh:      make(chan struct{}),
 	}
 

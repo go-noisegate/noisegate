@@ -72,30 +72,77 @@ func (m *JobManager) partition(job *Job, numPartitions int) error {
 var elapsedTimeRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL|SKIP|BENCH): (.+) \(([0-9.]+s)\)$`)
 
 func (m *JobManager) testResultHandler(job *Job, w io.Writer) {
+	tasks := make(map[string]*Task)
+	affected := make(map[string]struct{})
+	var affectedTestnames []string
+	for _, t := range job.Tasks {
+		tasks[t.TestFunction] = t
+		if t.Affected {
+			affected[t.TestFunction] = struct{}{}
+			affectedTestnames = append(affectedTestnames, t.TestFunction)
+		}
+	}
+	if len(affectedTestnames) != 0 {
+		w.Write([]byte("### Important tests: " + strings.Join(affectedTestnames, "|") + "\n"))
+	} else {
+		w.Write([]byte("### No important tests\n"))
+	}
+
+	handle := func(task *Task, testResult TestResult) {
+		output := strings.Join(testResult.Output, "")
+		w.Write([]byte(output))
+
+		elapsedTime := time.Duration(-1)
+		submatch := elapsedTimeRegexp.FindStringSubmatch(output)
+		if len(submatch) > 1 {
+			if d, err := time.ParseDuration(submatch[3]); err == nil {
+				elapsedTime = d
+				m.profiler.Add(job.DirPath, testResult.TestName, elapsedTime)
+			}
+		}
+
+		task.Finish(testResult.Successful, elapsedTime)
+	}
+
+	var resultBuffer []TestResult
 	for {
 		select {
 		case <-job.finishedCh:
 			return
 		case testResult := <-job.testResultCh:
-			output := strings.Join(testResult.Output, "")
-			w.Write([]byte(output))
-
-			elapsedTime := time.Duration(-1)
-			submatch := elapsedTimeRegexp.FindStringSubmatch(output)
-			if len(submatch) > 1 {
-				if d, err := time.ParseDuration(submatch[1]); err == nil {
-					elapsedTime = d
-					m.profiler.Add(job.DirPath, testResult.TestName, elapsedTime)
-				}
+			task, ok := tasks[testResult.TestName]
+			if !ok {
+				break
 			}
 
-			for _, t := range job.Tasks {
-				if t.TestFunction == testResult.TestName {
-					t.Finish(testResult.Successful, elapsedTime)
+			if len(affected) == 0 {
+				handle(task, testResult)
+				break
+			}
+
+			if !task.Affected {
+				// buffer not-affected test function until all the affected tests are done.
+				resultBuffer = append(resultBuffer, testResult)
+				break
+			}
+
+			handle(task, testResult)
+			delete(affected, task.TestFunction)
+
+			if len(affected) == 0 {
+				w.Write([]byte("### Important tests are done. Now running other tests\n"))
+
+				// Now all the affected test functions are done. Release the buffer.
+				for _, r := range resultBuffer {
+					handle(tasks[r.TestName], r)
 				}
 			}
 		}
 	}
+	fmt.Printf("done\n")
+}
+
+func (m *JobManager) handleOneResult(dirPath string, w io.Writer) {
 }
 
 // Find finds the specified job.
