@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"go/build"
@@ -98,7 +99,18 @@ func NewJob(pkg *Package, changedFilename string, changedOffset, dependencyDepth
 		var affectedTestFuncs map[string]struct{}
 		var err error
 		if changedFilename != "" {
+			start := time.Now()
+			defer func() {
+				log.Debugf("dep analysis time: %v\n", time.Since(start))
+			}()
 			affectedTestFuncs, err = FindTestFunctions(&build.Default, changedFilename, changedOffset)
+			if log.DebugLogEnabled() {
+				var fs []string
+				for f := range affectedTestFuncs {
+					fs = append(fs, f)
+				}
+				log.Debugf("these funcs are executed first: [%v]\n", strings.Join(fs, ", "))
+			}
 		}
 		errCh <- err
 		affectedFuncsCh <- affectedTestFuncs
@@ -200,25 +212,32 @@ func generateID() int64 {
 	return atomic.AddInt64(&jobIDCounter, 1)
 }
 
-// CanFinish returns true if all the task sets are done. False otherwise.
-func (j *Job) CanFinish() bool {
+// Start starts all the task sets.
+func (j *Job) Start(ctx context.Context) {
 	for _, taskSet := range j.TaskSets {
-		st := taskSet.Status
-		if st != TaskSetStatusSuccessful && st != TaskSetStatusFailed {
-			return false
+		if log.DebugLogEnabled() {
+			var ts []string
+			for _, t := range taskSet.Tasks {
+				ts = append(ts, t.TestFunction)
+			}
+			log.Debugf("task set %d executes [%v]\n", taskSet.ID, ts)
+		}
+
+		if err := taskSet.Start(ctx); err != nil {
+			log.Printf("failed to start the worker: %v", err)
 		}
 	}
-	return true
 }
 
-// Finish is called when all the tasks are done.
-func (j *Job) Finish() {
+// Wait waits all the task sets finished.
+func (j *Job) Wait() {
 	successful := true
 	for _, taskSet := range j.TaskSets {
-		st := taskSet.Status
-		if st == TaskSetStatusSuccessful {
+		taskSet.Wait()
+
+		if taskSet.Status == TaskSetStatusSuccessful {
 			continue
-		} else if st == TaskSetStatusFailed {
+		} else if taskSet.Status == TaskSetStatusFailed {
 			successful = false
 		} else {
 			log.Printf("can not finish the job %d yet\n", j.ID)
@@ -244,13 +263,6 @@ func (j *Job) clean() {
 			log.Debugf("failed to remove the test binary %s: %v\n", j.TestBinaryPath, err)
 		}
 	}
-
-	// should not remove task sets' logs here because the client may not read them yet.
-}
-
-// WaitFinished waits until the job finished.
-func (j *Job) WaitFinished() {
-	<-j.finishedCh
 }
 
 // TaskSet represents the set of tasks handled by one worker.
@@ -287,15 +299,19 @@ func NewTaskSet(id int, job *Job) *TaskSet {
 	}
 }
 
-// Start starts the worker task set as `started`.
-func (s *TaskSet) Start(w *Worker) {
-	s.Worker = w
+// Start starts the worker.
+func (s *TaskSet) Start(ctx context.Context) error {
 	s.StartedAt = time.Now()
 	s.Status = TaskSetStatusStarted
+
+	s.Worker = NewWorker(ctx, s.Job, s)
+	return s.Worker.Start()
 }
 
-// Finish marks the task set as `finished`.
-func (s *TaskSet) Finish(successful bool) {
+// Wait waits the worker finished.
+func (s *TaskSet) Wait() {
+	successful, _ := s.Worker.Wait()
+
 	s.FinishedAt = time.Now()
 	if successful {
 		s.Status = TaskSetStatusSuccessful
@@ -356,13 +372,13 @@ type taskWithExecTime struct {
 }
 
 // Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(tasks []*Task, job *Job, taskSetIDBase, numPartitions int) []*TaskSet {
+func (p LPTPartitioner) Partition(tasks []*Task, job *Job, numPartitions int) []*TaskSet {
 	sortedTasks, noProfileTasks := p.sortByExecTime(tasks, job)
 
 	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
 	taskSets := make([]*TaskSet, numPartitions)
 	for i := 0; i < numPartitions; i++ {
-		taskSets[i] = NewTaskSet(taskSetIDBase+i, job)
+		taskSets[i] = NewTaskSet(len(job.TaskSets)+i, job)
 	}
 	totalExecTimes := make([]time.Duration, numPartitions)
 	for _, t := range sortedTasks {

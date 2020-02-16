@@ -39,14 +39,7 @@ func (m *JobManager) StartJob(ctx context.Context, job *Job, numPartitions int, 
 	go m.testResultHandler(job, testResultWriter)
 
 	log.Debugf("starts %d task set(s)\n", len(job.TaskSets))
-	for _, taskSet := range job.TaskSets {
-		w := NewWorker(ctx, job, taskSet)
-		if err := w.Start(); err != nil {
-			log.Printf("failed to start the worker: %v", err)
-			continue
-		}
-		taskSet.Start(w)
-	}
+	job.Start(ctx)
 
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
@@ -70,9 +63,9 @@ func (m *JobManager) partition(job *Job, numPartitions int) error {
 	}
 
 	if len(affectedTasks) > 0 {
-		job.TaskSets = m.partitioner.Partition(affectedTasks, job, 0, numPartitions)
+		job.TaskSets = m.partitioner.Partition(affectedTasks, job, numPartitions)
 	}
-	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notAffectedTasks, job, len(job.TaskSets), numPartitions)...)
+	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notAffectedTasks, job, numPartitions)...)
 	return nil
 }
 
@@ -82,7 +75,7 @@ func (m *JobManager) testResultHandler(job *Job, w io.Writer) {
 	for {
 		select {
 		case <-job.finishedCh:
-			break
+			return
 		case testResult := <-job.testResultCh:
 			output := strings.Join(testResult.Output, "")
 			w.Write([]byte(output))
@@ -123,19 +116,10 @@ func (m *JobManager) WaitJob(jobID int64) error {
 	if err != nil {
 		return err
 	}
-
-	for _, taskSet := range job.TaskSets {
-		if taskSet.Worker == nil {
-			taskSet.Finish(false)
-			continue
-		}
-		successful, _ := taskSet.Worker.Wait()
-		taskSet.Finish(successful)
-	}
+	job.Wait()
 
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
-	job.Finish()
 	delete(m.jobs, jobID)
 
 	return nil

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -86,7 +87,7 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 					panic(err)
 				}
 				ch <- job.ID
-				job.Finish()
+				job.Wait()
 			}
 		}()
 	}
@@ -101,7 +102,7 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	}
 }
 
-func TestJob_Finish(t *testing.T) {
+func TestJob_Wait(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
@@ -110,20 +111,19 @@ func TestJob_Finish(t *testing.T) {
 		t.Fatalf("failed to create new job: %v", err)
 	}
 
-	job.Finish()
+	job.Wait()
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
 	}
 	if _, err := os.Stat(job.TestBinaryPath); !os.IsNotExist(err) {
 		t.Errorf("test binary still exist: %v", err)
 	}
-	job.WaitFinished()
+	<-job.finishedCh
 }
 
 func TestTaskSet_Start(t *testing.T) {
-	set := NewTaskSet(1, &Job{ID: 1})
-	w := &Worker{}
-	set.Start(w)
+	set := NewTaskSet(1, &Job{ID: 1, Package: &Package{}})
+	set.Start(context.Background())
 	if set.Status != TaskSetStatusStarted {
 		t.Errorf("wrong status: %v", set.Status)
 	}
@@ -133,14 +133,15 @@ func TestTaskSet_Start(t *testing.T) {
 	if set.LogPath != filepath.Join(sharedDir, "log", "job", "1_1") {
 		t.Errorf("wrong log path: %s", set.LogPath)
 	}
-	if set.Worker != w {
-		t.Errorf("wrong worker: %v", set.Worker)
+	if set.Worker == nil {
+		t.Errorf("nil worker")
 	}
 }
 
-func TestTaskSet_Finish(t *testing.T) {
+func TestTaskSet_Wait(t *testing.T) {
 	set := NewTaskSet(1, &Job{ID: 1})
-	set.Finish(true)
+	set.Worker = &Worker{}
+	set.Wait()
 	if set.Status != TaskSetStatusSuccessful {
 		t.Errorf("wrong status: %v", set.Status)
 	}
@@ -167,13 +168,13 @@ func TestLPTPartition(t *testing.T) {
 	profiler.Add("/path", "f3", time.Millisecond)
 	p := NewLPTPartitioner(profiler)
 
-	job := &Job{DirPath: "/path"}
+	job := &Job{DirPath: "/path", TaskSets: []*TaskSet{&TaskSet{}}}
 	job.Tasks = []*Task{
 		{TestFunction: "f1"},
 		{TestFunction: "f2"},
 		{TestFunction: "f3"},
 	}
-	taskSets := p.Partition(job.Tasks, job, 1, 2)
+	taskSets := p.Partition(job.Tasks, job, 2)
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))
 	}
@@ -206,7 +207,7 @@ func TestLPTPartition_EmptyProfile(t *testing.T) {
 		{TestFunction: "f3", Job: job},
 	}
 	p := NewLPTPartitioner(NewSimpleProfiler())
-	taskSets := p.Partition(job.Tasks, job, 0, 2)
+	taskSets := p.Partition(job.Tasks, job, 2)
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))
 	}
