@@ -16,3 +16,11 @@ func TestSum(t *testing.T) {
 
 	// append only
 }
+
+type ExampleTestSuite struct{}
+
+func (suite *ExampleTestSuite) TestExample() {
+	Sum(1, 1)
+}
+
+func TestExampleTestSuite(t *testing.T) {}

@@ -15,36 +15,55 @@ import (
 	"golang.org/x/tools/go/ast/astutil"
 )
 
-// FindTestFunctions finds the test functions which related to the specified `filename` and offset`. `filename` must be abs.
+type influence struct {
+	from identity
+	to   map[string]struct{}
+}
+
+// FindInfluencedTests finds the test functions which related to the specified `filename` and offset`. `filename` must be abs.
 // summary:
 // 1. Finds the top-level declaration which encloses the specified offset.
-// 2-1. If the decl is the test function itself, just returns that test function.
+// 2-1. If the decl is the test function itself, returns the test function.
 // 2-2. Otherwise, lists the test functions which uses the identity step 1 finds. It only searches for the files in the same package.
 //   For example, if the offset specifies the last line of some non-test function, it finds the name of the function (e.g. `Sum`) first,
 //   and then finds the test functions which directly call the function (e.g. `TestSum1` and `TestSum2`).
-func FindTestFunctions(ctxt *build.Context, filename string, offset int) (map[string]struct{}, error) {
+// Note that if the found test function is a part of the test suite, the runner function of the test suite is returned.
+func FindInfluencedTests(ctxt *build.Context, filename string, offset int) (influence, error) {
 	pkg, err := newParsedPackage(ctxt, filepath.Dir(filename))
 	if err != nil {
 		if _, ok := err.(*build.NoGoError); ok {
-			return nil, nil
+			return influence{}, nil
 		}
-		return nil, err
+		return influence{}, err
 	}
 
 	id, err := pkg.findEnclosingIdentity(filename, offset)
 	if err != nil {
-		return nil, err
+		return influence{}, err
 	}
 
 	if id == nil {
-		return nil, nil
+		return influence{}, nil
 	} else if id.IsTestFunc() {
-		return map[string]struct{}{id.Name(): struct{}{}}, nil
+		to := make(map[string]struct{})
+		name := id.Name()
+		if index := strings.Index(name, "."); index != -1 {
+			// TODO: workaround to support test suite. Consider more precise approach.
+			for _, t := range []string{"Test_", "Test"} {
+				if pkg.pkg.Scope.Lookup(t+name[:index]) != nil {
+					to[t+name[:index]] = struct{}{}
+				}
+			}
+		} else {
+			to[name] = struct{}{}
+		}
+		return influence{from: id, to: to}, nil
 	}
+	log.Debugf("find not-test enclosing identity: %s", id.Name())
 
 	users, err := pkg.findUsers(id)
 	if err != nil {
-		return nil, err
+		return influence{}, err
 	}
 
 	set := make(map[string]struct{})
@@ -53,8 +72,7 @@ func FindTestFunctions(ctxt *build.Context, filename string, offset int) (map[st
 			set[f] = struct{}{}
 		}
 	}
-
-	return set, nil
+	return influence{from: id, to: set}, nil
 }
 
 type parsedPackage struct {
@@ -100,7 +118,7 @@ func newParsedPackage(ctxt *build.Context, packageDir string) (parsedPackage, er
 	}
 	var conf types.Config
 	conf.Error = func(err error) {
-		log.Debugf("type check error: %v", err)
+		// log.Debugf("type check error: %v", err) // too verbose and less important in our case
 	}
 	_, _ = conf.Check(astPkg.Name, fset, files, &info)
 	return parsedPackage{pkgDir: packageDir, pkg: astPkg, fset: fset, info: &info}, nil
@@ -136,6 +154,7 @@ func (p parsedPackage) findEnclosingIdentity(filename string, offset int) (ident
 
 			receiverType := decl.Recv.List[0].Type
 			return methodIdentity{
+				filename:         filename,
 				functionName:     decl.Name.Name,
 				receiverTypename: p.findTypenameFromType(receiverType),
 				findTypename:     p.findTypenameFromVar,
@@ -211,8 +230,20 @@ func (p parsedPackage) findTestFunction(id *ast.Ident) string {
 	nodes, _ := astutil.PathEnclosingInterval(p.pkg.Files[position.Filename], id.Pos(), id.Pos())
 	for _, n := range nodes {
 		if decl, ok := n.(*ast.FuncDecl); ok {
-			if decl.Recv == nil && strings.HasPrefix(decl.Name.Name, "Test") {
+			if !strings.HasPrefix(decl.Name.Name, "Test") {
+				continue
+			}
+			if decl.Recv == nil {
 				return decl.Name.Name
+			}
+
+			// TODO: workaround to support test suite. Consider more precise approach.
+			receiverType := decl.Recv.List[0].Type
+			suiteName := p.findTypenameFromType(receiverType)
+			for _, t := range []string{"Test_", "Test"} {
+				if p.pkg.Scope.Lookup(t+suiteName) != nil {
+					return t + suiteName
+				}
 			}
 		}
 	}
@@ -270,6 +301,7 @@ func (id functionIdentity) IsTestFunc() bool {
 }
 
 type methodIdentity struct {
+	filename         string
 	functionName     string
 	receiverTypename string
 	findTypename     func(ast.Expr) string
@@ -289,5 +321,5 @@ func (id methodIdentity) Name() string {
 }
 
 func (id methodIdentity) IsTestFunc() bool {
-	return false
+	return strings.HasSuffix(id.filename, "_test.go") && strings.HasPrefix(id.functionName, "Test")
 }

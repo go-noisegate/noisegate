@@ -31,9 +31,9 @@ func TestJobManager_Partition_NoPartitions(t *testing.T) {
 	}
 }
 
-func TestJobManager_Partition_AffectedTasks(t *testing.T) {
+func TestJobManager_Partition_ImportantTasks(t *testing.T) {
 	job := &Job{ID: 1}
-	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job, Affected: true}, &Task{TestFunction: "TestFunc2", Job: job, Affected: false})
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job, Important: true}, &Task{TestFunction: "TestFunc2", Job: job, Important: false})
 
 	manager := NewJobManager()
 	if err := manager.partition(job, 2); err != nil {
@@ -42,8 +42,8 @@ func TestJobManager_Partition_AffectedTasks(t *testing.T) {
 	if len(job.TaskSets) != 4 {
 		t.Errorf("wrong number of task sets: %d", len(job.TaskSets))
 	}
-	if !job.TaskSets[0].Tasks[0].Affected {
-		t.Error("affected task should come first")
+	if !job.TaskSets[0].Tasks[0].Important {
+		t.Error("important task should come first")
 	}
 }
 
@@ -131,14 +131,14 @@ func TestJobManager_TestResultHandler(t *testing.T) {
 	}
 }
 
-func TestJobManager_HandleAffectedTestFirst(t *testing.T) {
+func TestJobManager_HandleImportantTestFirst(t *testing.T) {
 	m := NewJobManager()
 	job := &Job{
 		finishedCh:   make(chan struct{}),
 		testResultCh: make(chan TestResult),
 		Tasks: []*Task{
 			{TestFunction: "Test1"},
-			{TestFunction: "Test2", Affected: true},
+			{TestFunction: "Test2", Important: true},
 		},
 	}
 

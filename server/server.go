@@ -149,7 +149,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, _ := s.packageManager.Find(pathDir)
 
-	job, err := NewJob(pkg, changedFilename, input.Offset, 0)
+	job, err := NewJob(pkg, changedFilename, input.Offset)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -158,10 +158,17 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	respWriter := newFlushWriter(w)
+	if len(job.influence.to) == 0 {
+		respWriter.Write([]byte("No important tests. Run all the tests:\n"))
+	} else {
+		respWriter.Write([]byte("Found important tests. Run them first:\n"))
+	}
+
 	log.Debugf("start the job id %d\n", job.ID)
-	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers, newFlushWriter(w)); err != nil {
+	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers, respWriter); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		msg := fmt.Sprintf("failed to start the job: %v\n", err)
+		msg := fmt.Sprintf("set up failed: %v\n", err)
 		fmt.Fprint(w, msg)
 		log.Debug(msg)
 		return
@@ -172,14 +179,17 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 
 func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
 	if err := s.jobManager.WaitJob(job.ID); err != nil {
-		fmt.Fprintf(w, "failed to get the job result: %v", err)
+		fmt.Fprintf(w, "set up failed: %v", err)
 	}
 
 	result := "FAIL"
 	if job.Status == JobStatusSuccessful {
 		result = "PASS"
 	}
-	fmt.Fprintf(w, "%s: Job#%d (%s) (%v)\n", result, job.ID, job.DirPath, job.FinishedAt.Sub(job.CreatedAt))
+	elapsedTime := job.FinishedAt.Sub(job.StartedAt)
+	fmt.Fprintf(w, "%s (%v)\n", result, elapsedTime)
+	log.Debugf("time to execute all the tests: %v\n", elapsedTime)
+	log.Debugf("total time: %v\n", job.FinishedAt.Sub(job.CreatedAt))
 }
 
 type flushWriter struct {

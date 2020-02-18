@@ -38,7 +38,16 @@ func (m *JobManager) StartJob(ctx context.Context, job *Job, numPartitions int, 
 	}
 	go m.testResultHandler(job, testResultWriter)
 
-	log.Debugf("starts %d task set(s)\n", len(job.TaskSets))
+	if log.DebugLogEnabled() {
+		log.Debugf("starts %d task set(s)\n", len(job.TaskSets))
+		for _, taskSet := range job.TaskSets {
+			var ts []string
+			for _, t := range taskSet.Tasks {
+				ts = append(ts, t.TestFunction)
+			}
+			log.Debugf("task set %d: [%v]\n", taskSet.ID, ts)
+		}
+	}
 	job.Start(ctx)
 
 	m.mtx.Lock()
@@ -53,19 +62,19 @@ func (m *JobManager) partition(job *Job, numPartitions int) error {
 	}
 
 	// TODO: partitioner should handle this.
-	var affectedTasks, notAffectedTasks []*Task
+	var importantTasks, notImportantTasks []*Task
 	for _, t := range job.Tasks {
-		if t.Affected {
-			affectedTasks = append(affectedTasks, t)
+		if t.Important {
+			importantTasks = append(importantTasks, t)
 		} else {
-			notAffectedTasks = append(notAffectedTasks, t)
+			notImportantTasks = append(notImportantTasks, t)
 		}
 	}
 
-	if len(affectedTasks) > 0 {
-		job.TaskSets = m.partitioner.Partition(affectedTasks, job, numPartitions)
+	if len(importantTasks) > 0 {
+		job.TaskSets = m.partitioner.Partition(importantTasks, job, numPartitions)
 	}
-	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notAffectedTasks, job, numPartitions)...)
+	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notImportantTasks, job, numPartitions)...)
 	return nil
 }
 
@@ -73,19 +82,14 @@ var elapsedTimeRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL|SKIP|BENCH): (.+
 
 func (m *JobManager) testResultHandler(job *Job, w io.Writer) {
 	tasks := make(map[string]*Task)
-	affected := make(map[string]struct{})
-	var affectedTestnames []string
+	important := make(map[string]struct{})
+	var importantTestnames []string
 	for _, t := range job.Tasks {
 		tasks[t.TestFunction] = t
-		if t.Affected {
-			affected[t.TestFunction] = struct{}{}
-			affectedTestnames = append(affectedTestnames, t.TestFunction)
+		if t.Important {
+			important[t.TestFunction] = struct{}{}
+			importantTestnames = append(importantTestnames, t.TestFunction)
 		}
-	}
-	if len(affectedTestnames) != 0 {
-		w.Write([]byte("### Important tests: " + strings.Join(affectedTestnames, "|") + "\n"))
-	} else {
-		w.Write([]byte("### No important tests\n"))
 	}
 
 	handle := func(task *Task, testResult TestResult) {
@@ -115,31 +119,31 @@ func (m *JobManager) testResultHandler(job *Job, w io.Writer) {
 				break
 			}
 
-			if len(affected) == 0 {
+			if len(important) == 0 {
 				handle(task, testResult)
 				break
 			}
 
-			if !task.Affected {
-				// buffer not-affected test function until all the affected tests are done.
+			if !task.Important {
+				// buffer not-important test function until all the important tests are done.
 				resultBuffer = append(resultBuffer, testResult)
 				break
 			}
 
 			handle(task, testResult)
-			delete(affected, task.TestFunction)
+			delete(important, task.TestFunction)
 
-			if len(affected) == 0 {
-				w.Write([]byte("### Important tests are done. Now running other tests\n"))
+			if len(important) == 0 {
+				w.Write([]byte("\nRun other tests:\n"))
+				log.Debugf("time to execute important tests: %v\n", time.Now().Sub(job.StartedAt))
 
-				// Now all the affected test functions are done. Release the buffer.
+				// Now all the important test functions are done. Release the buffer.
 				for _, r := range resultBuffer {
 					handle(tasks[r.TestName], r)
 				}
 			}
 		}
 	}
-	fmt.Printf("done\n")
 }
 
 func (m *JobManager) handleOneResult(dirPath string, w io.Writer) {

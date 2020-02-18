@@ -23,17 +23,17 @@ import (
 
 // Job represents the job to test one package.
 type Job struct {
-	ID                    int64
-	DirPath               string
-	Status                JobStatus
-	Package               *Package
-	TestBinaryPath        string
-	CreatedAt, FinishedAt time.Time
-	DependencyDepth       int
-	TaskSets              []*TaskSet
-	Tasks                 []*Task
-	testResultCh          chan TestResult
-	finishedCh            chan struct{}
+	ID                               int64
+	DirPath                          string
+	Status                           JobStatus
+	Package                          *Package
+	TestBinaryPath                   string
+	CreatedAt, StartedAt, FinishedAt time.Time
+	TaskSets                         []*TaskSet
+	Tasks                            []*Task
+	influence                        influence
+	testResultCh                     chan TestResult
+	finishedCh                       chan struct{}
 }
 
 // JobStatus represents the status of the job.
@@ -46,23 +46,22 @@ const (
 )
 
 // NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
-// where the package is changed. If `changedFilename` is not empty, affected test functions are executed first.
-func NewJob(pkg *Package, changedFilename string, changedOffset, dependencyDepth int) (*Job, error) {
+// where the package is changed. If `changedFilename` is not empty, important test functions are executed first.
+func NewJob(pkg *Package, changedFilename string, changedOffset int) (*Job, error) {
 	job := &Job{
-		ID:              generateID(),
-		DirPath:         pkg.path,
-		Package:         pkg,
-		Status:          JobStatusCreated,
-		CreatedAt:       time.Now(),
-		DependencyDepth: dependencyDepth,
-		testResultCh:    make(chan TestResult), // must be unbuffered to avoid the lost result.
-		finishedCh:      make(chan struct{}),
+		ID:           generateID(),
+		DirPath:      pkg.path,
+		Package:      pkg,
+		Status:       JobStatusCreated,
+		CreatedAt:    time.Now(),
+		testResultCh: make(chan TestResult), // must be unbuffered to avoid the lost result.
+		finishedCh:   make(chan struct{}),
 	}
 
 	errCh := make(chan error)
 	binaryPathCh := make(chan string, 1) // to avoid go routine leaks
 	funcNamesCh := make(chan []string, 1)
-	affectedFuncsCh := make(chan map[string]struct{}, 1)
+	influenceCh := make(chan influence, 1)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -96,24 +95,25 @@ func NewJob(pkg *Package, changedFilename string, changedOffset, dependencyDepth
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		var affectedTestFuncs map[string]struct{}
+		var inf influence
 		var err error
 		if changedFilename != "" {
 			start := time.Now()
 			defer func() {
 				log.Debugf("dep analysis time: %v\n", time.Since(start))
 			}()
-			affectedTestFuncs, err = FindTestFunctions(&build.Default, changedFilename, changedOffset)
+			inf, err = FindInfluencedTests(&build.Default, changedFilename, changedOffset)
+
 			if log.DebugLogEnabled() {
 				var fs []string
-				for f := range affectedTestFuncs {
+				for f := range inf.to {
 					fs = append(fs, f)
 				}
-				log.Debugf("these funcs are executed first: [%v]\n", strings.Join(fs, ", "))
+				log.Debugf("%v -> [%v]\n", inf.from, strings.Join(fs, ", "))
 			}
 		}
 		errCh <- err
-		affectedFuncsCh <- affectedTestFuncs
+		influenceCh <- inf
 	}()
 
 	go func() {
@@ -127,10 +127,10 @@ func NewJob(pkg *Package, changedFilename string, changedOffset, dependencyDepth
 	}
 	// assumes the go routines send the data anyway
 	job.TestBinaryPath = <-binaryPathCh
-	affectedFuncs := <-affectedFuncsCh
+	job.influence = <-influenceCh
 	for _, testFuncName := range <-funcNamesCh {
-		_, affected := affectedFuncs[testFuncName]
-		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Affected: affected, Job: job})
+		_, ok := job.influence.to[testFuncName]
+		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Important: ok, Job: job})
 	}
 
 	if err != nil {
@@ -214,15 +214,9 @@ func generateID() int64 {
 
 // Start starts all the task sets.
 func (j *Job) Start(ctx context.Context) {
-	for _, taskSet := range j.TaskSets {
-		if log.DebugLogEnabled() {
-			var ts []string
-			for _, t := range taskSet.Tasks {
-				ts = append(ts, t.TestFunction)
-			}
-			log.Debugf("task set %d executes [%v]\n", taskSet.ID, ts)
-		}
+	j.StartedAt = time.Now()
 
+	for _, taskSet := range j.TaskSets {
 		if err := taskSet.Start(ctx); err != nil {
 			log.Printf("failed to start the worker: %v", err)
 		}
@@ -324,7 +318,7 @@ func (s *TaskSet) Wait() {
 type Task struct {
 	TestFunction string
 	Status       TaskStatus
-	Affected     bool
+	Important    bool
 	ElapsedTime  time.Duration
 	Job          *Job
 }

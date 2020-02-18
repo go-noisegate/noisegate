@@ -10,57 +10,75 @@ import (
 	"testing"
 )
 
-func TestFindTestFunctions_Function(t *testing.T) {
+func TestFindInfluencedTests_Function(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum.go")
-	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 35)
+	influence, err := FindInfluencedTests(&build.Default, pkgPath, 35)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(testFuncs) != 1 {
-		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
+	if len(influence.to) != 2 {
+		t.Fatalf("wrong # of funcs: %d", len(influence.to))
 	}
-	if _, ok := testFuncs["TestSum"]; !ok {
+	if _, ok := influence.to["TestSum"]; !ok {
+		t.Errorf("no expected func")
+	}
+	if _, ok := influence.to["TestExampleTestSuite"]; !ok {
 		t.Errorf("no expected func")
 	}
 }
 
-func TestFindTestFunctions_TestFunction(t *testing.T) {
+func TestFindInfluencedTests_TestFunction(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 67)
+	influence, err := FindInfluencedTests(&build.Default, pkgPath, 67)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(testFuncs) != 1 {
-		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
+	if len(influence.to) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(influence.to))
 	}
-	if _, ok := testFuncs["TestSum"]; !ok {
+	if _, ok := influence.to["TestSum"]; !ok {
 		t.Errorf("no expected func")
 	}
 }
 
-func TestFindTestFunctions_IdentityNotFound(t *testing.T) {
+func TestFindInfluencedTests_TestSuite(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 0)
+	influence, err := FindInfluencedTests(&build.Default, pkgPath, 304)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(testFuncs) != 0 {
-		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
+	if len(influence.to) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(influence.to))
+	}
+	if _, ok := influence.to["TestExampleTestSuite"]; !ok {
+		t.Errorf("no expected func: %#v", influence.to)
 	}
 }
 
-func TestFindTestFunctions_NoGoDirectory(t *testing.T) {
+func TestFindInfluencedTests_IdentityNotFound(t *testing.T) {
+	cwd, _ := os.Getwd()
+	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
+	influence, err := FindInfluencedTests(&build.Default, pkgPath, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(influence.to) != 0 {
+		t.Fatalf("wrong # of funcs: %d", len(influence.to))
+	}
+}
+
+func TestFindInfluencedTests_NoGoDirectory(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "no_go_files", "README.md")
-	testFuncs, err := FindTestFunctions(&build.Default, pkgPath, 0)
+	influence, err := FindInfluencedTests(&build.Default, pkgPath, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(testFuncs) != 0 {
-		t.Fatalf("wrong # of funcs: %d", len(testFuncs))
+	if len(influence.to) != 0 {
+		t.Fatalf("wrong # of funcs: %d", len(influence.to))
 	}
 }
 
@@ -306,7 +324,7 @@ func TestFindUsers_FuncUseFunc(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(users) != 1 {
+	if len(users) != 2 {
 		t.Fatalf("wrong # of users: %d", len(users))
 	}
 	pos := pkg.fset.Position(users[0].NamePos)
