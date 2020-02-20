@@ -20,6 +20,7 @@ type Worker struct {
 	testBinaryPath, packagePath, logPath string
 	testResultCh                         chan TestResult
 	cmd                                  *exec.Cmd
+	skipBuild                            bool
 }
 
 // NewWorker returns the worker which executes the task set.
@@ -36,6 +37,7 @@ func NewWorker(ctx context.Context, job *Job, taskSet *TaskSet) *Worker {
 		packagePath:    job.Package.path,
 		logPath:        taskSet.LogPath,
 		testResultCh:   job.testResultCh,
+		skipBuild:      job.numberOfWorkers == 1,
 	}
 }
 
@@ -45,7 +47,11 @@ func (w *Worker) Start() error {
 		return nil
 	}
 
-	w.cmd = exec.CommandContext(w.ctx, "go", "tool", "test2json", w.testBinaryPath, "-test.v", "-test.run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
+	if w.skipBuild {
+		w.cmd = exec.CommandContext(w.ctx, "go", "test", "-json", "-v", "-run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
+	} else {
+		w.cmd = exec.CommandContext(w.ctx, "go", "tool", "test2json", w.testBinaryPath, "-test.v", "-test.run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
+	}
 	w.cmd.Dir = w.packagePath
 
 	logFile, err := os.OpenFile(w.logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, os.ModePerm)

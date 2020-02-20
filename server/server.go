@@ -149,7 +149,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, _ := s.packageManager.Find(pathDir)
 
-	job, err := NewJob(pkg, changedFilename, input.Offset)
+	job, err := NewJob(pkg, changedFilename, input.Offset, s.defaultNumWorkers)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -166,7 +166,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debugf("start the job id %d\n", job.ID)
-	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers, respWriter); err != nil {
+	if err := s.jobManager.StartJob(context.Background(), job, respWriter); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("set up failed: %v\n", err)
 		fmt.Fprint(w, msg)

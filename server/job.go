@@ -31,6 +31,7 @@ type Job struct {
 	CreatedAt, StartedAt, FinishedAt time.Time
 	TaskSets                         []*TaskSet
 	Tasks                            []*Task
+	numberOfWorkers                  int
 	influence                        influence
 	testResultCh                     chan TestResult
 	finishedCh                       chan struct{}
@@ -47,15 +48,16 @@ const (
 
 // NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
 // where the package is changed. If `changedFilename` is not empty, important test functions are executed first.
-func NewJob(pkg *Package, changedFilename string, changedOffset int) (*Job, error) {
+func NewJob(pkg *Package, changedFilename string, changedOffset, numWorkers int) (*Job, error) {
 	job := &Job{
-		ID:           generateID(),
-		DirPath:      pkg.path,
-		Package:      pkg,
-		Status:       JobStatusCreated,
-		CreatedAt:    time.Now(),
-		testResultCh: make(chan TestResult), // must be unbuffered to avoid the lost result.
-		finishedCh:   make(chan struct{}),
+		ID:              generateID(),
+		DirPath:         pkg.path,
+		Package:         pkg,
+		Status:          JobStatusCreated,
+		CreatedAt:       time.Now(),
+		numberOfWorkers: numWorkers,
+		testResultCh:    make(chan TestResult), // must be unbuffered to avoid the lost result.
+		finishedCh:      make(chan struct{}),
 	}
 
 	errCh := make(chan error)
@@ -72,13 +74,19 @@ func NewJob(pkg *Package, changedFilename string, changedOffset int) (*Job, erro
 			log.Debugf("build time: %v\n", time.Since(start))
 		}()
 
-		testBinaryPath := filepath.Join(sharedDir, "bin", strconv.FormatInt(job.ID, 10))
-		err := pkg.Build(testBinaryPath)
-		if err != nil {
-			if err == errNoGoTestFiles {
-				err = nil
+		var testBinaryPath string
+		var err error
+		if job.numberOfWorkers > 1 {
+			testBinaryPath = filepath.Join(sharedDir, "bin", strconv.FormatInt(job.ID, 10))
+			err = pkg.Build(testBinaryPath)
+			if err != nil {
+				if err == errNoGoTestFiles {
+					err = nil
+				}
+				testBinaryPath = ""
 			}
-			testBinaryPath = ""
+		} else {
+			pkg.Cancel() // to save some computational resource
 		}
 		errCh <- err
 		binaryPathCh <- testBinaryPath
@@ -216,6 +224,7 @@ func generateID() int64 {
 func (j *Job) Start(ctx context.Context) {
 	j.StartedAt = time.Now()
 
+	// TODO: bound the number of workers
 	for _, taskSet := range j.TaskSets {
 		if err := taskSet.Start(ctx); err != nil {
 			log.Printf("failed to start the worker: %v", err)

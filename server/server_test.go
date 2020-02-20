@@ -87,7 +87,7 @@ func TestHandleTest_InputIsFile(t *testing.T) {
 	}
 
 	out, _ := ioutil.ReadAll(w.Body)
-	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+ \(`+filepath.Dir(path)+`\) `, out)
+	matched, _ := regexp.Match(`(?m)^PASS \(`, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}
@@ -109,7 +109,7 @@ func TestHandleTest_InputIsDir(t *testing.T) {
 	}
 
 	out, _ := ioutil.ReadAll(w.Body)
-	matched, _ := regexp.Match(`(?m)^PASS: Job#\d+ \(`+path+`\) `, out)
+	matched, _ := regexp.Match(`(?m)^PASS \(`, out)
 	if !matched {
 		t.Errorf("unexpected content: %s", string(out))
 	}

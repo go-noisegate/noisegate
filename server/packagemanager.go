@@ -87,17 +87,19 @@ func (p *Package) Prebuild() error {
 
 // Build builds the package. Prebuild process is killed if exists.
 func (p *Package) Build(artifactPath string) error {
-	setup := func() {
-		p.mtx.Lock()
-		defer p.mtx.Unlock()
-
-		if p.cancelFunc != nil {
-			p.cancelFunc()
-		}
-		p.cancelFunc = nil
-	}
-	setup()
+	p.Cancel()
 	return p.buildContext(context.Background(), artifactPath)
+}
+
+// Cancel cancels the currently executing build.
+func (p *Package) Cancel() {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+
+	if p.cancelFunc != nil {
+		p.cancelFunc()
+	}
+	p.cancelFunc = nil
 }
 
 var patternNoTestFiles = regexp.MustCompile(`(?m)\s+\[no test files\]$`)

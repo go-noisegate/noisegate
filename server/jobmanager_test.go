@@ -9,11 +9,11 @@ import (
 )
 
 func TestJobManager_Partition(t *testing.T) {
-	job := &Job{ID: 1}
+	job := &Job{ID: 1, numberOfWorkers: 2}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job}, &Task{TestFunction: "TestFunc2", Job: job})
 
 	manager := NewJobManager()
-	if err := manager.partition(job, 2); err != nil {
+	if err := manager.partition(job); err != nil {
 		t.Fatal(err)
 	}
 	if len(job.TaskSets) != 2 {
@@ -22,21 +22,34 @@ func TestJobManager_Partition(t *testing.T) {
 }
 
 func TestJobManager_Partition_NoPartitions(t *testing.T) {
-	job := &Job{ID: 1}
+	job := &Job{ID: 1, numberOfWorkers: 0}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job}, &Task{TestFunction: "TestFunc2", Job: job})
 
 	manager := NewJobManager()
-	if err := manager.partition(job, 0); err == nil {
+	if err := manager.partition(job); err == nil {
 		t.Fatal("nil error")
 	}
 }
 
+func TestJobManager_Partition_OnePartitions(t *testing.T) {
+	job := &Job{ID: 1, numberOfWorkers: 1}
+	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1"}, &Task{TestFunction: "TestFunc2", Important: true})
+
+	manager := NewJobManager()
+	if err := manager.partition(job); err != nil {
+		t.Fatal(err)
+	}
+	if len(job.TaskSets) != 1 {
+		t.Errorf("wrong number of task sets: %#v", job.TaskSets)
+	}
+}
+
 func TestJobManager_Partition_ImportantTasks(t *testing.T) {
-	job := &Job{ID: 1}
+	job := &Job{ID: 1, numberOfWorkers: 2}
 	job.Tasks = append(job.Tasks, &Task{TestFunction: "TestFunc1", Job: job, Important: true}, &Task{TestFunction: "TestFunc2", Job: job, Important: false})
 
 	manager := NewJobManager()
-	if err := manager.partition(job, 2); err != nil {
+	if err := manager.partition(job); err != nil {
 		t.Fatal(err)
 	}
 	if len(job.TaskSets) != 4 {
@@ -49,17 +62,18 @@ func TestJobManager_Partition_ImportantTasks(t *testing.T) {
 
 func TestJobManager_StartAndWaitJob(t *testing.T) {
 	job := &Job{
-		ID:             1,
-		finishedCh:     make(chan struct{}),
-		Package:        &Package{},
-		TestBinaryPath: "echo",
+		ID:              1,
+		finishedCh:      make(chan struct{}),
+		Package:         &Package{},
+		TestBinaryPath:  "echo",
+		numberOfWorkers: 2,
 	}
 	for _, t := range []string{"Test1", "Test2"} {
 		job.Tasks = append(job.Tasks, &Task{TestFunction: t, Job: job})
 	}
 
 	manager := NewJobManager()
-	manager.StartJob(context.Background(), job, 2, &bytes.Buffer{})
+	manager.StartJob(context.Background(), job, &bytes.Buffer{})
 	if _, ok := manager.jobs[job.ID]; !ok {
 		t.Errorf("job is not stored: %d", job.ID)
 	}
@@ -86,17 +100,18 @@ func TestJobManager_StartAndWaitJob(t *testing.T) {
 
 func TestJobManager_StartAndWaitJob_Failed(t *testing.T) {
 	job := &Job{
-		ID:             1,
-		finishedCh:     make(chan struct{}),
-		Package:        &Package{},
-		TestBinaryPath: "/bin/not/exist",
+		ID:              1,
+		finishedCh:      make(chan struct{}),
+		Package:         &Package{},
+		TestBinaryPath:  "/bin/not/exist",
+		numberOfWorkers: 2,
 	}
 	for _, t := range []string{"Test1"} {
 		job.Tasks = append(job.Tasks, &Task{TestFunction: t, Job: job})
 	}
 
 	manager := NewJobManager()
-	manager.StartJob(context.Background(), job, 1, &bytes.Buffer{})
+	manager.StartJob(context.Background(), job, &bytes.Buffer{})
 
 	if err := manager.WaitJob(job.ID); err != nil {
 		t.Fatal(err)
