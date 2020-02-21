@@ -5,10 +5,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestWorker_StartAndWait(t *testing.T) {
@@ -64,6 +62,7 @@ func TestWorker_StartAndWait(t *testing.T) {
 			packagePath:    testCase.PackagePath,
 			logPath:        testCase.LogPath,
 			testFuncs:      testCase.Tasks,
+			testEventCh:    make(chan TestEvent, 64),
 		}
 		err := w.Start()
 		if (err != nil) != testCase.startErr {
@@ -90,7 +89,8 @@ func TestWorker_CheckOutput(t *testing.T) {
 	job := &Job{
 		TestBinaryPath: filepath.Join("testdata", "worker", "output_pass"),
 		Package:        &Package{},
-		testResultCh:   make(chan TestResult, 1),
+		testEventCh:    make(chan TestEvent, 64),
+		EnableParallel: true,
 	}
 	taskSet := &TaskSet{
 		Tasks:   []*Task{{TestFunction: "Test"}},
@@ -105,9 +105,9 @@ func TestWorker_CheckOutput(t *testing.T) {
 		t.Fatalf("unexpected result: %v %v", passed, err)
 	}
 
-	result := <-job.testResultCh
-	if result.TestName != "TestSum" {
-		t.Errorf("unexpected test name: %s", result.TestName)
+	ev := <-job.testEventCh
+	if ev.Test != "TestSum" {
+		t.Errorf("unexpected test name: %s", ev.Test)
 	}
 
 	out, err := ioutil.ReadFile(taskSet.LogPath)
@@ -119,7 +119,7 @@ func TestWorker_CheckOutput(t *testing.T) {
 	}
 }
 
-func TestWorker_SkipBuild(t *testing.T) {
+func TestWorker_ParallelDisabled(t *testing.T) {
 	tempDir, err := ioutil.TempDir("", "hornet-test")
 	if err != nil {
 		t.Errorf("failed to create the temp directory: %v", err)
@@ -129,7 +129,7 @@ func TestWorker_SkipBuild(t *testing.T) {
 
 	job := &Job{
 		Package:        &Package{path: filepath.Join(currDir, "testdata")},
-		testResultCh:   make(chan TestResult, 1),
+		testEventCh:    make(chan TestEvent, 64),
 		EnableParallel: false,
 	}
 	taskSet := &TaskSet{
@@ -146,61 +146,35 @@ func TestWorker_SkipBuild(t *testing.T) {
 		t.Fatalf("unexpected result: %v, %v", passed, err)
 	}
 
-	result := <-job.testResultCh
-	if result.TestName != "TestSum" {
-		t.Errorf("unexpected test name: %s", result.TestName)
+	ev := <-job.testEventCh
+	if ev.Test != "TestSum" {
+		t.Errorf("unexpected test name: %s", ev.Test)
 	}
 }
 
 func TestTestOutputWriter(t *testing.T) {
-	ch := make(chan TestResult, 1)
+	ch := make(chan TestEvent, 1)
 	w := newTestOutputWriter(ch)
 
-	lines := []string{
-		`{"Action":"run","Test":"TestSum"}`,
-		`{"Action":"output","Test":"TestSum","Output":"=== RUN   TestSum\n"}`,
-		`{"Action":"output","Test":"TestSum","Output":"--- PASS: TestSum (0.01s)\n"}`,
-		`{"Action":"pass","Test":"TestSum","Elapsed":0.01}`,
-		`{"Action":"output","Output":"PASS\n"}`,
-		`{"Action":"output","Output":"ok \n"}`,
-		`{"Action":"pass","Elapsed":0.01}`,
-	}
-	for _, line := range lines {
-		_, err := w.Write([]byte(line + "\n"))
-		if err != nil {
-			t.Fatal(err)
-		}
+	_, err := w.Write([]byte(`{"Action":"run","Test":"TestSum"}` + "\n"))
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	result := <-ch
-	if result.TestName != "TestSum" {
-		t.Errorf("wrong test name: %s", result.TestName)
+	ev := <-ch
+	if ev.Test != "TestSum" {
+		t.Errorf("wrong test name: %s", ev.Test)
 	}
-	if !result.Successful {
-		t.Error("not successful")
-	}
-	if result.ElapsedTime != 10*time.Millisecond {
-		t.Errorf("wrong duration: %v", result.ElapsedTime)
-	}
-	if !reflect.DeepEqual([]string{"=== RUN   TestSum\n", "--- PASS: TestSum (0.01s)\n"}, result.Output) {
-		t.Errorf("wrong output: %v", result.Output)
+	if ev.Action != "run" {
+		t.Errorf("wrong action: %s", ev.Action)
 	}
 }
 
 func TestTestOutputWriter_WriteOneByte(t *testing.T) {
-	ch := make(chan TestResult, 1)
+	ch := make(chan TestEvent, 1)
 	w := newTestOutputWriter(ch)
 
-	out := strings.Join([]string{
-		`{"Action":"run","Test":"TestSum"}`,
-		`{"Action":"output","Test":"TestSum","Output":"=== RUN   TestSum\n"}`,
-		`{"Action":"output","Test":"TestSum","Output":"--- PASS: TestSum (0.01s)\n"}`,
-		`{"Action":"pass","Test":"TestSum","Elapsed":0.01}`,
-		`{"Action":"output","Output":"PASS\n"}`,
-		`{"Action":"output","Output":"ok \n"}`,
-		`{"Action":"pass","Elapsed":0.01}`,
-	}, "\n")
-
+	out := `{"Action":"run","Test":"TestSum"}` + "\n"
 	for i := 0; i < len(out); i++ {
 		_, err := w.Write([]byte{out[i]})
 		if err != nil {
@@ -208,14 +182,14 @@ func TestTestOutputWriter_WriteOneByte(t *testing.T) {
 		}
 	}
 
-	result := <-ch
-	if result.TestName != "TestSum" {
-		t.Errorf("wrong test name: %s", result.TestName)
+	ev := <-ch
+	if ev.Test != "TestSum" {
+		t.Errorf("wrong test name: %s", ev.Test)
 	}
 }
 
 func TestTestOutputWriter_WriteAtOnce(t *testing.T) {
-	ch := make(chan TestResult, 1)
+	ch := make(chan TestEvent, 64)
 	w := newTestOutputWriter(ch)
 
 	out := strings.Join([]string{
@@ -233,55 +207,29 @@ func TestTestOutputWriter_WriteAtOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := <-ch
-	if result.TestName != "TestSum" {
-		t.Errorf("wrong test name: %s", result.TestName)
+	ev := <-ch
+	if ev.Test != "TestSum" {
+		t.Errorf("wrong test name: %s", ev.Test)
 	}
-}
-
-func TestTestOutputWriter_MergeInnerTest(t *testing.T) {
-	ch := make(chan TestResult, 1)
-	w := newTestOutputWriter(ch)
-
-	lines := []string{
-		`{"Action":"run","Test":"TestSum"}`,
-		`{"Action":"output","Test":"TestSum","Output":"=== RUN   TestSum\n"}`,
-		`{"Action":"run","Test":"TestSum/Case1"}`,
-		`{"Action":"output","Test":"TestSum/Case1","Output":"=== RUN   TestSum/Case1\n"}`,
-
-		`{"Action":"output","Test":"TestSum","Output":"--- PASS: TestSum (0.01s)\n"}`,
-		`{"Action":"output","Test":"TestSum/Case1","Output":"    --- PASS: TestSum/Case1 (0.00s)\n"}`,
-		`{"Action":"pass","Test":"TestSum/Case1","Elapsed":0}`,
-		`{"Action":"pass","Test":"TestSum","Elapsed":0.01}`,
-	}
-	for _, line := range lines {
-		_, err := w.Write([]byte(line + "\n"))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	result := <-ch
-	if result.TestName != "TestSum" {
-		t.Errorf("wrong test name: %s", result.TestName)
-	}
-	if !result.Successful {
-		t.Error("not successful")
-	}
-	if result.ElapsedTime != 10*time.Millisecond {
-		t.Errorf("wrong duration: %v", result.ElapsedTime)
-	}
-	if !reflect.DeepEqual([]string{"=== RUN   TestSum\n", "=== RUN   TestSum/Case1\n", "--- PASS: TestSum (0.01s)\n", "    --- PASS: TestSum/Case1 (0.00s)\n"}, result.Output) {
-		t.Errorf("wrong output: %v", result.Output)
+	ev = <-ch
+	if ev.Test != "TestSum" {
+		t.Errorf("wrong test name: %s", ev.Test)
 	}
 }
 
 func TestTestOutputWriter_InvalidJSON(t *testing.T) {
-	ch := make(chan TestResult, 1)
+	ch := make(chan TestEvent, 1)
 	f := newTestOutputWriter(ch)
 
 	_, err := f.Write([]byte("not json\n"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	ev := <-ch
+	if ev.Action != "unknown" {
+		t.Errorf("wrong action: %s", ev.Action)
+	}
+	if ev.Output != "not json\n" {
+		t.Errorf("wrong output: %s", ev.Output)
 	}
 }

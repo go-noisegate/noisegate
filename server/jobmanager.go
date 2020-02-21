@@ -36,7 +36,7 @@ func (m *JobManager) StartJob(ctx context.Context, job *Job, numWorkers int, tes
 	if err := m.partition(job, numWorkers); err != nil {
 		return err
 	}
-	go m.testResultHandler(job, testResultWriter)
+	go m.testEventHandler(job, testResultWriter)
 
 	if log.DebugLogEnabled() {
 		log.Debugf("starts %d task set(s)\n", len(job.TaskSets))
@@ -81,75 +81,16 @@ func (m *JobManager) partition(job *Job, numWorkers int) error {
 	return nil
 }
 
-var elapsedTimeRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL|SKIP|BENCH): (.+) \(([0-9.]+s)\)$`)
-
-func (m *JobManager) testResultHandler(job *Job, w io.Writer) {
-	tasks := make(map[string]*Task)
-	important := make(map[string]struct{})
-	var importantTestnames []string
-	for _, t := range job.Tasks {
-		tasks[t.TestFunction] = t
-		if t.Important {
-			important[t.TestFunction] = struct{}{}
-			importantTestnames = append(importantTestnames, t.TestFunction)
-		}
-	}
-
-	handle := func(task *Task, testResult TestResult) {
-		output := strings.Join(testResult.Output, "")
-		w.Write([]byte(output))
-
-		elapsedTime := time.Duration(-1)
-		submatch := elapsedTimeRegexp.FindStringSubmatch(output)
-		if len(submatch) > 1 {
-			if d, err := time.ParseDuration(submatch[3]); err == nil {
-				elapsedTime = d
-				m.profiler.Add(job.DirPath, testResult.TestName, elapsedTime)
-			}
-		}
-
-		task.Finish(testResult.Successful, elapsedTime)
-	}
-
-	var resultBuffer []TestResult
+func (m *JobManager) testEventHandler(job *Job, w io.Writer) {
+	handler := newEventHandler(job, w)
 	for {
 		select {
 		case <-job.finishedCh:
 			return
-		case testResult := <-job.testResultCh:
-			task, ok := tasks[testResult.TestName]
-			if !ok {
-				break
-			}
-
-			if len(important) == 0 {
-				handle(task, testResult)
-				break
-			}
-
-			if !task.Important {
-				// buffer not-important test function until all the important tests are done.
-				resultBuffer = append(resultBuffer, testResult)
-				break
-			}
-
-			handle(task, testResult)
-			delete(important, task.TestFunction)
-
-			if len(important) == 0 {
-				w.Write([]byte("\nRun other tests:\n"))
-				log.Debugf("time to execute important tests: %v\n", time.Now().Sub(job.StartedAt))
-
-				// Now all the important test functions are done. Release the buffer.
-				for _, r := range resultBuffer {
-					handle(tasks[r.TestName], r)
-				}
-			}
+		case ev := <-job.testEventCh:
+			handler.handle(ev)
 		}
 	}
-}
-
-func (m *JobManager) handleOneResult(dirPath string, w io.Writer) {
 }
 
 // Find finds the specified job.
@@ -172,9 +113,119 @@ func (m *JobManager) WaitJob(jobID int64) error {
 	}
 	job.Wait()
 
+	// TODO: update profiler
+	// m.profiler.Add(job.DirPath, testResult.TestName, elapsedTime)
+
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 	delete(m.jobs, jobID)
 
 	return nil
+}
+
+var elapsedTimeRegexp = regexp.MustCompile(`(?m)^--- (PASS|FAIL|SKIP|BENCH): (.+) \(([0-9.]+s)\)$`)
+
+type eventHandler struct {
+	job            *Job
+	tasks          map[string]*Task
+	importantTests map[string]struct{}
+	runningTests   map[string][]string
+	buffer         []TestResult
+	w              io.Writer
+}
+
+func newEventHandler(job *Job, w io.Writer) *eventHandler {
+	tasks := make(map[string]*Task)
+	importantTests := make(map[string]struct{})
+	for _, t := range job.Tasks {
+		tasks[t.TestFunction] = t
+		if t.Important {
+			importantTests[t.TestFunction] = struct{}{}
+		}
+	}
+	runningTests := make(map[string][]string)
+	return &eventHandler{job: job, tasks: tasks, importantTests: importantTests, runningTests: runningTests, w: w}
+}
+
+func (h *eventHandler) handleResult(result TestResult) {
+	task, ok := h.tasks[result.TestName]
+	if !ok {
+		return
+	}
+
+	output := strings.Join(result.Output, "")
+	h.w.Write([]byte(output))
+
+	elapsedTime := time.Duration(-1)
+	submatch := elapsedTimeRegexp.FindStringSubmatch(output)
+	if len(submatch) > 1 {
+		if d, err := time.ParseDuration(submatch[3]); err == nil {
+			elapsedTime = d
+		}
+	}
+
+	task.Finish(result.Successful, elapsedTime)
+}
+
+func (h *eventHandler) handleResultWithBuffer(result TestResult) {
+	task, ok := h.tasks[result.TestName]
+	if !ok {
+		return
+	}
+
+	if len(h.importantTests) == 0 {
+		h.handleResult(result)
+		return
+	}
+
+	if !task.Important {
+		// buffer not-important test function until all the important tests are done.
+		h.buffer = append(h.buffer, result)
+		return
+	}
+
+	// it's important test function. Handle here.
+	h.handleResult(result)
+	delete(h.importantTests, task.TestFunction)
+
+	if len(h.importantTests) == 0 {
+		h.w.Write([]byte("\nRun other tests:\n"))
+		log.Debugf("time to execute important tests: %v\n", time.Now().Sub(h.job.StartedAt))
+
+		// Now all the important test functions are done. Release the buffer.
+		for _, r := range h.buffer {
+			h.handleResult(r)
+		}
+	}
+}
+
+func (h *eventHandler) handle(ev TestEvent) {
+	if ev.Action == "unknown" {
+		h.w.Write([]byte(ev.Output))
+		return
+	}
+
+	chunks := strings.SplitN(ev.Test, "/", 2)
+	if len(chunks) == 2 {
+		// merge the output to the parent test
+		if ev.Action == "output" {
+			parentTest := chunks[0]
+			h.runningTests[parentTest] = append(h.runningTests[parentTest], ev.Output)
+		}
+		return
+	}
+
+	switch ev.Action {
+	case "run":
+		h.runningTests[ev.Test] = []string{}
+	case "pause", "cont":
+		// do nothing
+	case "output":
+		h.runningTests[ev.Test] = append(h.runningTests[ev.Test], ev.Output)
+	case "pass", "fail", "skip", "bench":
+		elapsedTime := time.Duration(ev.Elapsed * 1000 * 1000 * 1000) // Elapsed is float64 in second
+		res := TestResult{TestName: ev.Test, Successful: ev.Action != "fail", ElapsedTime: elapsedTime, Output: h.runningTests[ev.Test]}
+		h.handleResultWithBuffer(res)
+		delete(h.runningTests, ev.Test)
+	}
 }

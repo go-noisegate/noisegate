@@ -64,6 +64,7 @@ func TestJobManager_StartAndWaitJob(t *testing.T) {
 	job := &Job{
 		ID:             1,
 		finishedCh:     make(chan struct{}),
+		testEventCh:    make(chan TestEvent),
 		Package:        &Package{},
 		TestBinaryPath: "echo",
 		EnableParallel: true,
@@ -102,6 +103,7 @@ func TestJobManager_StartAndWaitJob_Failed(t *testing.T) {
 	job := &Job{
 		ID:             1,
 		finishedCh:     make(chan struct{}),
+		testEventCh:    make(chan TestEvent),
 		Package:        &Package{},
 		TestBinaryPath: "/bin/not/exist",
 		EnableParallel: true,
@@ -121,52 +123,102 @@ func TestJobManager_StartAndWaitJob_Failed(t *testing.T) {
 	}
 }
 
-func TestJobManager_TestResultHandler(t *testing.T) {
-	m := NewJobManager()
-	job := &Job{finishedCh: make(chan struct{}), testResultCh: make(chan TestResult), Tasks: []*Task{{TestFunction: "Test1"}}}
-	buff := &bytes.Buffer{}
-	output := "--- PASS: Test1 (0.01s)\n"
-	go func() {
-		res := TestResult{TestName: "Test1", Successful: true, Output: []string{output}}
-		job.testResultCh <- res
-		close(job.finishedCh)
-	}()
-
-	m.testResultHandler(job, buff)
-	if !strings.Contains(buff.String(), output) {
-		t.Errorf("invalid output: %s", buff.String())
+func TestEventHandler_HandleResult(t *testing.T) {
+	var buff bytes.Buffer
+	task := &Task{TestFunction: "Test1"}
+	h := newEventHandler(&Job{Tasks: []*Task{task}}, &buff)
+	result := TestResult{TestName: "Test1", Output: []string{"output\n", "--- PASS: Test1 (0.01s)\n"}, Successful: true}
+	h.handleResult(result)
+	if buff.String() != strings.Join(result.Output, "") {
+		t.Errorf("wrong content: %s", buff.String())
 	}
 
-	if job.Tasks[0].Status != TaskStatusSuccessful {
-		t.Errorf("invalid status: %v", job.Tasks[0].Status)
+	if task.Status != TaskStatusSuccessful {
+		t.Errorf("wrong status: %v", task.Status)
 	}
-
-	if job.Tasks[0].ElapsedTime != 10*time.Millisecond {
-		t.Errorf("invalid time: %v", job.Tasks[0].ElapsedTime)
+	if task.ElapsedTime != 10*time.Millisecond {
+		t.Errorf("wrong elapsed time: %v", task.ElapsedTime)
 	}
 }
 
-func TestJobManager_HandleImportantTestFirst(t *testing.T) {
-	m := NewJobManager()
-	job := &Job{
-		finishedCh:   make(chan struct{}),
-		testResultCh: make(chan TestResult),
-		Tasks: []*Task{
-			{TestFunction: "Test1"},
-			{TestFunction: "Test2", Important: true},
-		},
-		EnableParallel: true,
+func TestEventHandler_HandleResultWithBuffer(t *testing.T) {
+	var buff bytes.Buffer
+	importantTask := &Task{TestFunction: "TestImportant", Important: true}
+	notImportantTask := &Task{TestFunction: "TestNotImportant", Important: false}
+	h := newEventHandler(&Job{Tasks: []*Task{importantTask, notImportantTask}}, &buff)
+
+	h.handleResultWithBuffer(TestResult{
+		TestName:   "TestNotImportant",
+		Output:     []string{"not important\n"},
+		Successful: true,
+	})
+	h.handleResultWithBuffer(TestResult{
+		TestName:   "TestImportant",
+		Output:     []string{"important\n"},
+		Successful: true,
+	})
+
+	if buff.String() != "important\n\nRun other tests:\nnot important\n" {
+		t.Errorf("wrong content: %s", buff.String())
 	}
 
-	buff := &bytes.Buffer{}
-	go func() {
-		job.testResultCh <- TestResult{TestName: "Test1", Successful: true, Output: []string{"Test1\n"}}
-		job.testResultCh <- TestResult{TestName: "Test2", Successful: true, Output: []string{"Test2\n"}}
-		close(job.finishedCh)
-	}()
+	if importantTask.Status != TaskStatusSuccessful {
+		t.Errorf("wrong status: %v", importantTask.Status)
+	}
+	if notImportantTask.Status != TaskStatusSuccessful {
+		t.Errorf("wrong status: %v", notImportantTask.Status)
+	}
+}
 
-	m.testResultHandler(job, buff)
-	if strings.Index(buff.String(), "Test2\n") > strings.Index(buff.String(), "Test1\n") {
-		t.Errorf("invalid output: %s", buff.String())
+func TestEventHandler_Handle(t *testing.T) {
+	var buff bytes.Buffer
+	task := &Task{TestFunction: "TestSum"}
+	h := newEventHandler(&Job{Tasks: []*Task{task}}, &buff)
+	for _, ev := range []TestEvent{
+		{Action: "run", Test: "TestSum"},
+		{Action: "output", Test: "TestSum", Output: "=== RUN   TestSum\n"},
+		{Action: "output", Test: "TestSum", Output: "--- PASS: TestSum (0.01s)\n"},
+		{Action: "pass", Test: "TestSum", Elapsed: 0.02},
+		{Action: "output", Output: "PASS\n"},
+		{Action: "output", Output: "ok \n"},
+		{Action: "pass", Elapsed: 0.02},
+	} {
+		h.handle(ev)
+	}
+	if buff.String() != "=== RUN   TestSum\n--- PASS: TestSum (0.01s)\n" {
+		t.Errorf("wrong content: %s", buff.String())
+	}
+	if task.Status != TaskStatusSuccessful {
+		t.Errorf("wrong status: %v", task.Status)
+	}
+	if task.ElapsedTime != 10*time.Millisecond {
+		t.Errorf("wrong elapsed time: %v", task.ElapsedTime)
+	}
+}
+
+func TestEventHandler_Handle_MergeInnerTest(t *testing.T) {
+	var buff bytes.Buffer
+	task := &Task{TestFunction: "TestSum"}
+	h := newEventHandler(&Job{Tasks: []*Task{task}}, &buff)
+	for _, ev := range []TestEvent{
+		{Action: "run", Test: "TestSum"},
+		{Action: "output", Test: "TestSum", Output: "=== RUN   TestSum\n"},
+		{Action: "run", Test: "TestSum/Case1"},
+		{Action: "output", Test: "TestSum/Case1", Output: "=== RUN   TestSum/Case1\n"},
+		{Action: "output", Test: "TestSum", Output: "--- PASS: TestSum (0.02s)\n"},
+		{Action: "output", Test: "TestSum/Case1", Output: "--- PASS: TestSum/Case1 (0.01s)\n"},
+		{Action: "pass", Test: "TestSum/Case1", Elapsed: 0.01},
+		{Action: "pass", Test: "TestSum", Elapsed: 0.02},
+	} {
+		h.handle(ev)
+	}
+	if buff.String() != "=== RUN   TestSum\n=== RUN   TestSum/Case1\n--- PASS: TestSum (0.02s)\n--- PASS: TestSum/Case1 (0.01s)\n" {
+		t.Errorf("wrong content: %s", buff.String())
+	}
+	if task.Status != TaskStatusSuccessful {
+		t.Errorf("wrong status: %v", task.Status)
+	}
+	if task.ElapsedTime != 20*time.Millisecond {
+		t.Errorf("wrong elapsed time: %v", task.ElapsedTime)
 	}
 }

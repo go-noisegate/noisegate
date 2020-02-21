@@ -9,18 +9,15 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
-
-	"github.com/ks888/hornet/common/log"
 )
 
 type Worker struct {
 	ctx                                  context.Context
 	testFuncs                            []string
 	testBinaryPath, packagePath, logPath string
-	testResultCh                         chan TestResult
+	testEventCh                          chan TestEvent
 	cmd                                  *exec.Cmd
-	skipBuild                            bool
+	binaryNotExist                       bool
 }
 
 // NewWorker returns the worker which executes the task set.
@@ -36,8 +33,8 @@ func NewWorker(ctx context.Context, job *Job, taskSet *TaskSet) *Worker {
 		testBinaryPath: job.TestBinaryPath,
 		packagePath:    job.Package.path,
 		logPath:        taskSet.LogPath,
-		testResultCh:   job.testResultCh,
-		skipBuild:      !job.EnableParallel,
+		testEventCh:    job.testEventCh,
+		binaryNotExist: !job.EnableParallel,
 	}
 }
 
@@ -47,7 +44,7 @@ func (w *Worker) Start() error {
 		return nil
 	}
 
-	if w.skipBuild {
+	if w.binaryNotExist {
 		w.cmd = exec.CommandContext(w.ctx, "go", "test", "-json", "-v", "-run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
 	} else {
 		w.cmd = exec.CommandContext(w.ctx, "go", "tool", "test2json", w.testBinaryPath, "-test.v", "-test.run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
@@ -58,7 +55,7 @@ func (w *Worker) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to open the log file %s: %w\n", w.logPath, err)
 	}
-	writer := io.MultiWriter(newTestOutputWriter(w.testResultCh), logFile)
+	writer := io.MultiWriter(newTestOutputWriter(w.testEventCh), logFile)
 	w.cmd.Stdout = writer
 	w.cmd.Stderr = writer
 	if err := w.cmd.Start(); err != nil {
@@ -76,7 +73,8 @@ func (w *Worker) Wait() (bool, error) {
 	return err == nil, err
 }
 
-type event struct {
+// TestEvent represents the event the test runner emits.
+type TestEvent struct {
 	Action  string
 	Test    string
 	Elapsed float64
@@ -86,13 +84,13 @@ type event struct {
 type testOutputWriter struct {
 	buff         []byte
 	runningTests map[string][]string
-	resultCh     chan TestResult
+	eventCh      chan TestEvent
 }
 
-func newTestOutputWriter(resultCh chan TestResult) *testOutputWriter {
+func newTestOutputWriter(eventCh chan TestEvent) *testOutputWriter {
 	return &testOutputWriter{
 		runningTests: make(map[string][]string),
-		resultCh:     resultCh,
+		eventCh:      eventCh,
 	}
 }
 
@@ -111,18 +109,17 @@ func (w *testOutputWriter) Write(p []byte) (n int, err error) {
 		}
 		w.buff = w.buff[advance:]
 
-		ev := &event{}
-		if err := json.Unmarshal([]byte(line), ev); err != nil {
-			log.Printf("test output is not json (%s): %v\n", line, err)
-			return n, nil
+		ev := TestEvent{}
+		if err := json.Unmarshal(line, &ev); err != nil {
+			ev = TestEvent{Action: "unknown", Output: string(line) + "\n"}
 		}
 
-		w.handleEvent(ev)
+		w.eventCh <- ev
 	}
 	return n, nil
 }
 
-func (w *testOutputWriter) handleEvent(ev *event) {
+func (w *testOutputWriter) handleEvent(ev *TestEvent) {
 	if ev.Test == "" {
 		return
 	}
@@ -145,8 +142,8 @@ func (w *testOutputWriter) handleEvent(ev *event) {
 	case "output":
 		w.runningTests[ev.Test] = append(w.runningTests[ev.Test], ev.Output)
 	case "pass", "fail", "skip", "bench":
-		res := TestResult{TestName: ev.Test, Successful: ev.Action != "fail", ElapsedTime: time.Duration(ev.Elapsed * 1000 * 1000 * 1000), Output: w.runningTests[ev.Test]}
-		w.resultCh <- res
+		// res := TestResult{TestName: ev.Test, Successful: ev.Action != "fail", ElapsedTime: time.Duration(ev.Elapsed * 1000 * 1000 * 1000), Output: w.runningTests[ev.Test]}
+		// w.resultCh <- res
 		delete(w.runningTests, ev.Test)
 	}
 }

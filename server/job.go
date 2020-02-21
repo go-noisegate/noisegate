@@ -33,7 +33,7 @@ type Job struct {
 	Tasks                            []*Task
 	EnableParallel                   bool
 	influence                        influence
-	testResultCh                     chan TestResult
+	testEventCh                      chan TestEvent
 	finishedCh                       chan struct{}
 }
 
@@ -56,7 +56,7 @@ func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParal
 		Status:         JobStatusCreated,
 		CreatedAt:      time.Now(),
 		EnableParallel: enableParallel,
-		testResultCh:   make(chan TestResult), // must be unbuffered to avoid the lost result.
+		testEventCh:    make(chan TestEvent), // must be unbuffered to avoid the lost result.
 		finishedCh:     make(chan struct{}),
 	}
 
