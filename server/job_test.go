@@ -32,7 +32,7 @@ func TestNewJob(t *testing.T) {
 	}
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, 2)
+	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -44,9 +44,6 @@ func TestNewJob(t *testing.T) {
 	}
 	if !strings.HasPrefix(job.TestBinaryPath, filepath.Join(sharedDir, "bin")) {
 		t.Errorf("wrong path: %v", job.TestBinaryPath)
-	}
-	if job.numberOfWorkers != 2 {
-		t.Errorf("wrong # of partitions: %v", job.numberOfWorkers)
 	}
 
 	expectedTasks := []Task{
@@ -64,28 +61,25 @@ func TestNewJob(t *testing.T) {
 	}
 }
 
-func TestNewJob_SkipBuild(t *testing.T) {
+func TestNewJob_ParallelDisabled(t *testing.T) {
 	currDir, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("failed to get wd: %v", err)
 	}
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, 1)
+	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, false)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
 	if job.TestBinaryPath != "" {
 		t.Errorf("wrong path: %v", job.TestBinaryPath)
 	}
-	if job.numberOfWorkers != 1 {
-		t.Errorf("wrong # of partitions: %v", job.numberOfWorkers)
-	}
 }
 
 func TestNewJob_InvalidDirPath(t *testing.T) {
 	dirPath := "/not/exist/dir"
-	_, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, 1)
+	_, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true)
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
@@ -101,7 +95,7 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
-				job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "README.md"), 0, 1)
+				job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "README.md"), 0, true)
 				if err != nil {
 					panic(err)
 				}
@@ -125,7 +119,7 @@ func TestJob_Wait(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, 1)
+	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}

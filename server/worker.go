@@ -37,7 +37,7 @@ func NewWorker(ctx context.Context, job *Job, taskSet *TaskSet) *Worker {
 		packagePath:    job.Package.path,
 		logPath:        taskSet.LogPath,
 		testResultCh:   job.testResultCh,
-		skipBuild:      job.numberOfWorkers == 1,
+		skipBuild:      !job.EnableParallel,
 	}
 }
 

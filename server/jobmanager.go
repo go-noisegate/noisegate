@@ -32,8 +32,8 @@ func NewJobManager() *JobManager {
 }
 
 // StartJob starts the job.
-func (m *JobManager) StartJob(ctx context.Context, job *Job, testResultWriter io.Writer) error {
-	if err := m.partition(job); err != nil {
+func (m *JobManager) StartJob(ctx context.Context, job *Job, numWorkers int, testResultWriter io.Writer) error {
+	if err := m.partition(job, numWorkers); err != nil {
 		return err
 	}
 	go m.testResultHandler(job, testResultWriter)
@@ -56,11 +56,11 @@ func (m *JobManager) StartJob(ctx context.Context, job *Job, testResultWriter io
 	return nil
 }
 
-func (m *JobManager) partition(job *Job) error {
-	if job.numberOfWorkers == 0 && len(job.Tasks) != 0 {
+func (m *JobManager) partition(job *Job, numWorkers int) error {
+	if numWorkers == 0 && len(job.Tasks) != 0 {
 		return errors.New("the number of partitions is 0")
-	} else if job.numberOfWorkers == 1 {
-		job.TaskSets = m.partitioner.Partition(job.Tasks, job, job.numberOfWorkers)
+	} else if !job.EnableParallel {
+		job.TaskSets = m.partitioner.Partition(job.Tasks, job, 1)
 		return nil
 	}
 
@@ -75,9 +75,9 @@ func (m *JobManager) partition(job *Job) error {
 	}
 
 	if len(importantTasks) > 0 {
-		job.TaskSets = m.partitioner.Partition(importantTasks, job, job.numberOfWorkers)
+		job.TaskSets = m.partitioner.Partition(importantTasks, job, numWorkers)
 	}
-	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notImportantTasks, job, job.numberOfWorkers)...)
+	job.TaskSets = append(job.TaskSets, m.partitioner.Partition(notImportantTasks, job, numWorkers)...)
 	return nil
 }
 

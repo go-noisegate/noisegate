@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -27,8 +28,12 @@ func main() {
 
 			log.EnableDebugLog(c.Bool("debug"))
 
+			numWorkers := c.Int("num-workers")
+			if numWorkers < 1 {
+				return errors.New("the number of workers must be positive")
+			}
 			opt := workerOptions{
-				numWorkers: c.Int("num-workers"),
+				numWorkers: numWorkers,
 			}
 			return runServer(addr, opt)
 		},

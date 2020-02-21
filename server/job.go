@@ -31,7 +31,7 @@ type Job struct {
 	CreatedAt, StartedAt, FinishedAt time.Time
 	TaskSets                         []*TaskSet
 	Tasks                            []*Task
-	numberOfWorkers                  int
+	EnableParallel                   bool
 	influence                        influence
 	testResultCh                     chan TestResult
 	finishedCh                       chan struct{}
@@ -48,16 +48,16 @@ const (
 
 // NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
 // where the package is changed. If `changedFilename` is not empty, important test functions are executed first.
-func NewJob(pkg *Package, changedFilename string, changedOffset, numWorkers int) (*Job, error) {
+func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParallel bool) (*Job, error) {
 	job := &Job{
-		ID:              generateID(),
-		DirPath:         pkg.path,
-		Package:         pkg,
-		Status:          JobStatusCreated,
-		CreatedAt:       time.Now(),
-		numberOfWorkers: numWorkers,
-		testResultCh:    make(chan TestResult), // must be unbuffered to avoid the lost result.
-		finishedCh:      make(chan struct{}),
+		ID:             generateID(),
+		DirPath:        pkg.path,
+		Package:        pkg,
+		Status:         JobStatusCreated,
+		CreatedAt:      time.Now(),
+		EnableParallel: enableParallel,
+		testResultCh:   make(chan TestResult), // must be unbuffered to avoid the lost result.
+		finishedCh:     make(chan struct{}),
 	}
 
 	errCh := make(chan error)
@@ -76,7 +76,7 @@ func NewJob(pkg *Package, changedFilename string, changedOffset, numWorkers int)
 
 		var testBinaryPath string
 		var err error
-		if job.numberOfWorkers > 1 {
+		if job.EnableParallel {
 			testBinaryPath = filepath.Join(sharedDir, "bin", strconv.FormatInt(job.ID, 10))
 			err = pkg.Build(testBinaryPath)
 			if err != nil {
@@ -86,7 +86,7 @@ func NewJob(pkg *Package, changedFilename string, changedOffset, numWorkers int)
 				testBinaryPath = ""
 			}
 		} else {
-			pkg.Cancel() // to save some computational resource
+			pkg.Cancel() // to stop the unnecessary build
 		}
 		errCh <- err
 		binaryPathCh <- testBinaryPath
@@ -170,7 +170,7 @@ func findRepoRoot(path string) string {
 	return strings.TrimSpace(string(out))
 }
 
-var errNoGoTestFiles = errors.New("no go test files (though there may be go files)")
+var errNoGoTestFiles = errors.New("no go test files")
 
 var patternTestFuncName = regexp.MustCompile(`(?m)^ *func *(Test[^(]+)`)
 
@@ -224,7 +224,6 @@ func generateID() int64 {
 func (j *Job) Start(ctx context.Context) {
 	j.StartedAt = time.Now()
 
-	// TODO: bound the number of workers
 	for _, taskSet := range j.TaskSets {
 		if err := taskSet.Start(ctx); err != nil {
 			log.Printf("failed to start the worker: %v", err)

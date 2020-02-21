@@ -128,9 +128,9 @@ func TestWorker_SkipBuild(t *testing.T) {
 	currDir, _ := os.Getwd()
 
 	job := &Job{
-		Package:         &Package{path: filepath.Join(currDir, "testdata")},
-		testResultCh:    make(chan TestResult, 1),
-		numberOfWorkers: 1,
+		Package:        &Package{path: filepath.Join(currDir, "testdata")},
+		testResultCh:   make(chan TestResult, 1),
+		EnableParallel: false,
 	}
 	taskSet := &TaskSet{
 		Tasks:   []*Task{{TestFunction: "TestSum"}},
