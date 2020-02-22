@@ -34,6 +34,7 @@ type HornetServer struct {
 	*http.Server
 	jobManager        *JobManager
 	packageManager    *PackageManager
+	jobProfiler       *JobProfiler
 	defaultNumWorkers int
 	depthLimit        int
 }
@@ -45,6 +46,7 @@ func NewHornetServer(addr string, defaultNumWorkers int) HornetServer {
 		jobManager:        NewJobManager(),
 		packageManager:    NewPackageManager(),
 		defaultNumWorkers: defaultNumWorkers,
+		jobProfiler:       NewJobProfiler(),
 	}
 
 	mux := http.NewServeMux()
@@ -149,7 +151,11 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, _ := s.packageManager.Find(pathDir)
 
-	job, err := NewJob(pkg, changedFilename, input.Offset, true)
+	parallel := true
+	if lastElapsedTime, ok := s.jobProfiler.LastElapsedTime(pkg.path); ok && lastElapsedTime < time.Second {
+		parallel = false
+	}
+	job, err := NewJob(pkg, changedFilename, input.Offset, parallel)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -187,6 +193,8 @@ func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
 		result = "PASS"
 	}
 	elapsedTime := job.FinishedAt.Sub(job.StartedAt)
+	s.jobProfiler.Add(job.DirPath, elapsedTime)
+
 	fmt.Fprintf(w, "%s (%v)\n", result, elapsedTime)
 	log.Debugf("time to execute all the tests: %v\n", elapsedTime)
 	log.Debugf("total time: %v\n", job.FinishedAt.Sub(job.CreatedAt))

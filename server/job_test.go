@@ -131,7 +131,7 @@ func TestJob_Wait(t *testing.T) {
 	if _, err := os.Stat(job.TestBinaryPath); !os.IsNotExist(err) {
 		t.Errorf("test binary still exist: %v", err)
 	}
-	<-job.finishedCh
+	<-job.jobFinishedCh
 }
 
 func TestTaskSet_Start(t *testing.T) {
@@ -175,7 +175,7 @@ func TestTask_Finish(t *testing.T) {
 }
 
 func TestLPTPartition(t *testing.T) {
-	profiler := NewSimpleProfiler()
+	profiler := NewTaskProfiler()
 	profiler.Add("/path", "f1", time.Millisecond)
 	profiler.Add("/path", "f2", time.Second)
 	profiler.Add("/path", "f3", time.Millisecond)
@@ -219,7 +219,7 @@ func TestLPTPartition_EmptyProfile(t *testing.T) {
 		{TestFunction: "f2", Job: job},
 		{TestFunction: "f3", Job: job},
 	}
-	p := NewLPTPartitioner(NewSimpleProfiler())
+	p := NewLPTPartitioner(NewTaskProfiler())
 	taskSets := p.Partition(job.Tasks, job, 2)
 	if len(taskSets) != 2 {
 		t.Fatalf("wrong number of task sets: %d", len(taskSets))

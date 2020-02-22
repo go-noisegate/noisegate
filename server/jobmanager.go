@@ -15,7 +15,7 @@ import (
 
 // JobManager manages the jobs.
 type JobManager struct {
-	profiler    *SimpleProfiler
+	profiler    *TaskProfiler
 	partitioner LPTPartitioner
 	jobs        map[int64]*Job
 	mtx         sync.Mutex // protect `jobs`
@@ -23,7 +23,7 @@ type JobManager struct {
 
 // NewJobManager returns the new job manager.
 func NewJobManager() *JobManager {
-	profiler := NewSimpleProfiler()
+	profiler := NewTaskProfiler()
 	return &JobManager{
 		profiler:    profiler,
 		partitioner: NewLPTPartitioner(profiler),
@@ -39,7 +39,11 @@ func (m *JobManager) StartJob(ctx context.Context, job *Job, numWorkers int, tes
 	go m.testEventHandler(job, testResultWriter)
 
 	if log.DebugLogEnabled() {
-		log.Debugf("starts %d task set(s)\n", len(job.TaskSets))
+		mode := "sequential"
+		if job.EnableParallel {
+			mode = "parallel"
+		}
+		log.Debugf("starts %d task set(s) [%s]\n", len(job.TaskSets), mode)
 		for _, taskSet := range job.TaskSets {
 			var ts []string
 			for _, t := range taskSet.Tasks {
@@ -85,7 +89,7 @@ func (m *JobManager) testEventHandler(job *Job, w io.Writer) {
 	handler := newEventHandler(job, w)
 	for {
 		select {
-		case <-job.finishedCh:
+		case <-job.jobFinishedCh:
 			return
 		case ev := <-job.testEventCh:
 			handler.handle(ev)
@@ -113,8 +117,14 @@ func (m *JobManager) WaitJob(jobID int64) error {
 	}
 	job.Wait()
 
-	// TODO: update profiler
-	// m.profiler.Add(job.DirPath, testResult.TestName, elapsedTime)
+	// TODO: wait the test result handler finished. The task status may not be updated yet.
+	for _, t := range job.Tasks {
+		if t.Status != TaskStatusSuccessful && t.Status != TaskStatusFailed {
+			log.Debugf("the task status is not 'done' status: %s\n", t.TestFunction)
+			continue
+		}
+		m.profiler.Add(job.DirPath, t.TestFunction, t.ElapsedTime)
+	}
 
 	m.mtx.Lock()
 	defer m.mtx.Unlock()

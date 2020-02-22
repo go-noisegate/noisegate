@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -61,20 +63,19 @@ func TestJobManager_Partition_ImportantTasks(t *testing.T) {
 }
 
 func TestJobManager_StartAndWaitJob(t *testing.T) {
-	job := &Job{
-		ID:             1,
-		finishedCh:     make(chan struct{}),
-		testEventCh:    make(chan TestEvent),
-		Package:        &Package{},
-		TestBinaryPath: "echo",
-		EnableParallel: true,
-	}
-	for _, t := range []string{"Test1", "Test2"} {
-		job.Tasks = append(job.Tasks, &Task{TestFunction: t, Job: job})
+	currDir, _ := os.Getwd()
+	dirPath := filepath.Join(currDir, "testdata")
+
+	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true)
+	if err != nil {
+		t.Fatalf("failed to create new job: %v", err)
 	}
 
 	manager := NewJobManager()
-	manager.StartJob(context.Background(), job, 2, &bytes.Buffer{})
+	manager.profiler.Add(job.DirPath, "TestSum", time.Hour) // to check the profiler is updated
+
+	var buff bytes.Buffer
+	manager.StartJob(context.Background(), job, 2, &buff)
 	if _, ok := manager.jobs[job.ID]; !ok {
 		t.Errorf("job is not stored: %d", job.ID)
 	}
@@ -97,12 +98,15 @@ func TestJobManager_StartAndWaitJob(t *testing.T) {
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("unexpected job status: %v", job.Status)
 	}
+	if manager.profiler.ExpectExecTime(job.DirPath, "TestSum") == time.Hour {
+		t.Errorf("profiler is not updated: %v", manager.profiler.ExpectExecTime(job.DirPath, "TestSum"))
+	}
 }
 
 func TestJobManager_StartAndWaitJob_Failed(t *testing.T) {
 	job := &Job{
 		ID:             1,
-		finishedCh:     make(chan struct{}),
+		jobFinishedCh:  make(chan struct{}),
 		testEventCh:    make(chan TestEvent),
 		Package:        &Package{},
 		TestBinaryPath: "/bin/not/exist",

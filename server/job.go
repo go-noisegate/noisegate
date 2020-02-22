@@ -34,7 +34,7 @@ type Job struct {
 	EnableParallel                   bool
 	influence                        influence
 	testEventCh                      chan TestEvent
-	finishedCh                       chan struct{}
+	jobFinishedCh                    chan struct{}
 }
 
 // JobStatus represents the status of the job.
@@ -57,7 +57,7 @@ func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParal
 		CreatedAt:      time.Now(),
 		EnableParallel: enableParallel,
 		testEventCh:    make(chan TestEvent), // must be unbuffered to avoid the lost result.
-		finishedCh:     make(chan struct{}),
+		jobFinishedCh:  make(chan struct{}),
 	}
 
 	errCh := make(chan error)
@@ -256,7 +256,7 @@ func (j *Job) Wait() {
 
 	j.clean()
 
-	close(j.finishedCh)
+	close(j.jobFinishedCh)
 }
 
 func (j *Job) clean() {
@@ -277,7 +277,6 @@ type TaskSet struct {
 	Tasks                 []*Task
 	Job                   *Job
 	Worker                *Worker
-	finishedCh            chan struct{}
 }
 
 // TaskSetStatus represents the status of the task set.
@@ -293,11 +292,10 @@ const (
 // NewTaskSet returns the new task set.
 func NewTaskSet(id int, job *Job) *TaskSet {
 	return &TaskSet{
-		ID:         id,
-		Status:     TaskSetStatusCreated,
-		LogPath:    filepath.Join(sharedDir, "log", "job", fmt.Sprintf("%d_%d", job.ID, id)),
-		Job:        job,
-		finishedCh: make(chan struct{}),
+		ID:      id,
+		Status:  TaskSetStatusCreated,
+		LogPath: filepath.Join(sharedDir, "log", "job", fmt.Sprintf("%d_%d", job.ID, id)),
+		Job:     job,
 	}
 }
 
@@ -360,11 +358,11 @@ type TestResult struct {
 
 // LPTPartitioner is the partitioner based on the longest processing time algorithm.
 type LPTPartitioner struct {
-	profiler *SimpleProfiler
+	profiler *TaskProfiler
 }
 
 // NewLPTPartitioner return the new LPTPartitioner.
-func NewLPTPartitioner(profiler *SimpleProfiler) LPTPartitioner {
+func NewLPTPartitioner(profiler *TaskProfiler) LPTPartitioner {
 	return LPTPartitioner{profiler: profiler}
 }
 
