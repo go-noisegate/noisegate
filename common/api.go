@@ -16,50 +16,19 @@ const (
 
 // TestRequest represents the input data to the test API.
 type TestRequest struct {
-	Path   string `json:"path"`
-	Offset int    `json:"offset"`
+	Path     string `json:"path"`
+	Offset   int    `json:"offset"`
+	Parallel string `json:"parallel"`
 }
+
+// valid parallel values
+const (
+	ParallelOn   = "on"
+	ParallelOff  = "off"
+	ParallelAuto = "auto"
+)
 
 // SetupRequest represents the input data to the setup API.
 type SetupRequest struct {
 	Path string `json:"path"`
-}
-
-//////////////////////////
-// APIs for the workers
-//////////////////////////
-
-const workersAPIPrefix = "/workers"
-
-const (
-	NextTaskSetPath  = workersAPIPrefix + "/next"
-	ReportResultPath = workersAPIPrefix + "/report"
-)
-
-// NextTaskSetRequest represents the input data to the next task set API.
-type NextTaskSetRequest struct {
-	WorkerGroupName string `json:"worker_group_name"`
-	WorkerID        int    `json:"worker_id"`
-}
-
-// NextTaskSetResponse represents the output data from the next task set API.
-type NextTaskSetResponse struct {
-	JobID         int64    `json:"job_id"`
-	TaskSetID     int      `json:"task_set_id"`
-	TestFunctions []string `json:"test_functions"`
-	// The path from the shared dir
-	LogPath string `json:"log_path"`
-	// The path from the shared dir
-	TestBinaryPath string `json:"test_binary_path"`
-	PackagePath    string `json:"package_path"`
-}
-
-// ReportResultRequest represents the input data to the report result API.
-type ReportResultRequest struct {
-	WorkerGroupName string `json:"worker_group_name"`
-	WorkerID        int    `json:"worker_id"`
-
-	JobID      int64 `json:"job_id"`
-	TaskSetID  int   `json:"task_set_id"`
-	Successful bool  `json:"successful"`
 }

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ks888/hornet/common"
 )
@@ -136,5 +137,34 @@ func TestHandleTest_RelativePath(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("unexpected code: %d", w.Code)
+	}
+}
+
+func TestHornetServer_Parallel(t *testing.T) {
+	server := NewHornetServer("", 1)
+	path := "/path/to/dir"
+	if res := server.parallel(path, common.ParallelOn); !res {
+		t.Errorf("wrong result: %v", res)
+	}
+
+	if res := server.parallel(path, common.ParallelOff); res {
+		t.Errorf("wrong result: %v", res)
+	}
+
+	// no last result
+	if res := server.parallel(path, common.ParallelAuto); !res {
+		t.Errorf("wrong result: %v", res)
+	}
+
+	// slow test
+	server.jobProfiler.Add(path, time.Second)
+	if res := server.parallel(path, common.ParallelAuto); !res {
+		t.Errorf("wrong result: %v", res)
+	}
+
+	// fast test
+	server.jobProfiler.Add(path, time.Millisecond)
+	if res := server.parallel(path, common.ParallelAuto); res {
+		t.Errorf("wrong result: %v", res)
 	}
 }

@@ -27,8 +27,16 @@ func main() {
 					log.EnableDebugLog(c.Bool("debug"))
 
 					query := c.Args().First()
-					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout}
+					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, Parallel: c.String("parallel")}
 					return client.TestAction(c.Context, query, options)
+				},
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "parallel",
+						Aliases: []string{"p"},
+						Usage:   "enable the parallel testing [on, off or auto]. When `auto`, the tool automatically chooses the faster option.",
+						Value:   "auto",
+					},
 				},
 			},
 			{
@@ -52,7 +60,7 @@ func main() {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "addr",
-				Usage: "hornetd server's address",
+				Usage: "hornetd server's `address`",
 				Value: "localhost:48059",
 			},
 			&cli.BoolFlag{

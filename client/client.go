@@ -21,6 +21,7 @@ import (
 type TestOptions struct {
 	ServerAddr string
 	TestLogger io.Writer
+	Parallel   string
 }
 
 // TestAction runs the test of the packages related to the specified file.
@@ -39,7 +40,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.TestRequest{Path: path, Offset: offset}
+	reqData := common.TestRequest{Path: path, Offset: offset, Parallel: options.Parallel}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err

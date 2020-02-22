@@ -151,11 +151,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, _ := s.packageManager.Find(pathDir)
 
-	parallel := true
-	if lastElapsedTime, ok := s.jobProfiler.LastElapsedTime(pkg.path); ok && lastElapsedTime < time.Second {
-		parallel = false
-	}
-	job, err := NewJob(pkg, changedFilename, input.Offset, parallel)
+	job, err := NewJob(pkg, changedFilename, input.Offset, s.parallel(pkg.path, input.Parallel))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -181,6 +177,20 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.WaitJob(w, job)
+}
+
+func (s HornetServer) parallel(path, clientArg string) bool {
+	switch clientArg {
+	case common.ParallelOn:
+		return true
+	case common.ParallelOff:
+		return false
+	default:
+		if lastElapsedTime, ok := s.jobProfiler.LastElapsedTime(path); ok && lastElapsedTime < time.Second {
+			return false
+		}
+		return true
+	}
 }
 
 func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
