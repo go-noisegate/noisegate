@@ -202,11 +202,11 @@ func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
 	if job.Status == JobStatusSuccessful {
 		result = "PASS"
 	}
-	elapsedTime := job.FinishedAt.Sub(job.StartedAt)
-	s.jobProfiler.Add(job.DirPath, elapsedTime)
 
-	fmt.Fprintf(w, "%s (%v)\n", result, elapsedTime)
-	log.Debugf("time to execute all the tests: %v\n", elapsedTime)
+	s.jobProfiler.Add(job.DirPath, job.ElapsedTestTime)
+
+	fmt.Fprintf(w, "%s (%v)\n", result, job.ElapsedTestTime)
+	log.Debugf("time to execute all the tests: %v\n", job.ElapsedTestTime)
 	log.Debugf("total time: %v\n", job.FinishedAt.Sub(job.CreatedAt))
 }
 

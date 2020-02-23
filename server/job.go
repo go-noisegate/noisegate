@@ -29,12 +29,14 @@ type Job struct {
 	Package                          *Package
 	TestBinaryPath                   string
 	CreatedAt, StartedAt, FinishedAt time.Time
-	TaskSets                         []*TaskSet
-	Tasks                            []*Task
-	EnableParallel                   bool
-	influence                        influence
-	testEventCh                      chan TestEvent
-	jobFinishedCh                    chan struct{}
+	// build time is not included
+	ElapsedTestTime time.Duration
+	TaskSets        []*TaskSet
+	Tasks           []*Task
+	EnableParallel  bool
+	influence       influence
+	testEventCh     chan TestEvent
+	jobFinishedCh   chan struct{}
 }
 
 // JobStatus represents the status of the job.
@@ -253,6 +255,11 @@ func (j *Job) Wait() {
 		j.Status = JobStatusFailed
 	}
 	j.FinishedAt = time.Now()
+	if j.EnableParallel {
+		j.ElapsedTestTime = j.FinishedAt.Sub(j.StartedAt)
+	} else {
+		// on sequential exec, the test results handler updates `ElapsedTestTime`.
+	}
 
 	j.clean()
 

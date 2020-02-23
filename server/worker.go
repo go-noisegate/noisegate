@@ -118,32 +118,3 @@ func (w *testOutputWriter) Write(p []byte) (n int, err error) {
 	}
 	return n, nil
 }
-
-func (w *testOutputWriter) handleEvent(ev *TestEvent) {
-	if ev.Test == "" {
-		return
-	}
-
-	chunks := strings.SplitN(ev.Test, "/", 2)
-	if len(chunks) == 2 {
-		// merge the output to the parent test
-		if ev.Action == "output" {
-			parentTest := chunks[0]
-			w.runningTests[parentTest] = append(w.runningTests[parentTest], ev.Output)
-		}
-		return
-	}
-
-	switch ev.Action {
-	case "run":
-		w.runningTests[ev.Test] = []string{}
-	case "pause", "cont":
-		// do nothing
-	case "output":
-		w.runningTests[ev.Test] = append(w.runningTests[ev.Test], ev.Output)
-	case "pass", "fail", "skip", "bench":
-		// res := TestResult{TestName: ev.Test, Successful: ev.Action != "fail", ElapsedTime: time.Duration(ev.Elapsed * 1000 * 1000 * 1000), Output: w.runningTests[ev.Test]}
-		// w.resultCh <- res
-		delete(w.runningTests, ev.Test)
-	}
-}

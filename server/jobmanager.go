@@ -180,6 +180,9 @@ func (h *eventHandler) handleResult(result TestResult) {
 func (h *eventHandler) handleResultWithBuffer(result TestResult) {
 	task, ok := h.tasks[result.TestName]
 	if !ok {
+		if result.TestName == "" && !h.job.EnableParallel {
+			h.job.ElapsedTestTime = result.ElapsedTime
+		}
 		return
 	}
 
@@ -200,7 +203,12 @@ func (h *eventHandler) handleResultWithBuffer(result TestResult) {
 
 	if len(h.importantTests) == 0 {
 		h.w.Write([]byte("\nRun other tests:\n"))
-		log.Debugf("time to execute important tests: %v\n", time.Now().Sub(h.job.StartedAt))
+		if h.job.EnableParallel {
+			log.Debugf("time to execute important tests: %v\n", time.Now().Sub(h.job.StartedAt))
+		} else {
+			// On sequential exec, the time which the build has finished is unknown
+			log.Debugf("time to execute important tests: (unknown)\n")
+		}
 
 		// Now all the important test functions are done. Release the buffer.
 		for _, r := range h.buffer {

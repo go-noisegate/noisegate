@@ -177,7 +177,8 @@ func TestEventHandler_HandleResultWithBuffer(t *testing.T) {
 func TestEventHandler_Handle(t *testing.T) {
 	var buff bytes.Buffer
 	task := &Task{TestFunction: "TestSum"}
-	h := newEventHandler(&Job{Tasks: []*Task{task}}, &buff)
+	job := &Job{Tasks: []*Task{task}, EnableParallel: false}
+	h := newEventHandler(job, &buff)
 	for _, ev := range []TestEvent{
 		{Action: "run", Test: "TestSum"},
 		{Action: "output", Test: "TestSum", Output: "=== RUN   TestSum\n"},
@@ -197,6 +198,9 @@ func TestEventHandler_Handle(t *testing.T) {
 	}
 	if task.ElapsedTime != 10*time.Millisecond {
 		t.Errorf("wrong elapsed time: %v", task.ElapsedTime)
+	}
+	if job.ElapsedTestTime != 20*time.Millisecond {
+		t.Errorf("wrong job elapsed time: %v", job.ElapsedTestTime)
 	}
 }
 
