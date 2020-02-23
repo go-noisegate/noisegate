@@ -120,6 +120,7 @@ func (m *JobManager) WaitJob(jobID int64) error {
 	// TODO: wait the test result handler finished. The task status may not be updated yet.
 	for _, t := range job.Tasks {
 		if t.Status != TaskStatusSuccessful && t.Status != TaskStatusFailed {
+			// typical reason is the test is ignored due to the build tag.
 			log.Debugf("the task status is not 'done' status: %s\n", t.TestFunction)
 			continue
 		}

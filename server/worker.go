@@ -15,6 +15,7 @@ type Worker struct {
 	ctx                                  context.Context
 	testFuncs                            []string
 	testBinaryPath, packagePath, logPath string
+	buildTags                            string
 	testEventCh                          chan TestEvent
 	cmd                                  *exec.Cmd
 	binaryNotExist                       bool
@@ -33,6 +34,7 @@ func NewWorker(ctx context.Context, job *Job, taskSet *TaskSet) *Worker {
 		testBinaryPath: job.TestBinaryPath,
 		packagePath:    job.Package.path,
 		logPath:        taskSet.LogPath,
+		buildTags:      job.BuildTags,
 		testEventCh:    job.testEventCh,
 		binaryNotExist: !job.EnableParallel,
 	}
@@ -45,7 +47,7 @@ func (w *Worker) Start() error {
 	}
 
 	if w.binaryNotExist {
-		w.cmd = exec.CommandContext(w.ctx, "go", "test", "-json", "-v", "-run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
+		w.cmd = exec.CommandContext(w.ctx, "go", "test", "-tags", w.buildTags, "-json", "-v", "-run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
 	} else {
 		w.cmd = exec.CommandContext(w.ctx, "go", "tool", "test2json", w.testBinaryPath, "-test.v", "-test.run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
 	}

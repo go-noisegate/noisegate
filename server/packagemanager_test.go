@@ -63,7 +63,7 @@ func TestPackage_Build(t *testing.T) {
 
 	artifactPath := filepath.Join(tempDir, "test")
 	p := Package{path: dirPath}
-	if err := p.Build(artifactPath); err != nil {
+	if err := p.Build(artifactPath, ""); err != nil {
 		t.Fatalf("failed to build pkg: %v", err)
 	}
 
@@ -77,7 +77,7 @@ func TestPackage_Build_NoGoFiles(t *testing.T) {
 	dirPath := filepath.Join(currDir, "testdata", "no_go_files")
 
 	p := Package{path: dirPath}
-	if err := p.Build("/not/exist"); err != errNoGoTestFiles {
+	if err := p.Build("/not/exist", ""); err != errNoGoTestFiles {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -87,7 +87,7 @@ func TestPackage_Build_NoGoTestFiles(t *testing.T) {
 	dirPath := filepath.Join(currDir, "testdata", "no_go_test_files")
 
 	p := Package{path: dirPath}
-	if err := p.Build("/not/exist"); err != errNoGoTestFiles {
+	if err := p.Build("/not/exist", ""); err != errNoGoTestFiles {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -97,7 +97,7 @@ func TestPackage_Build_BuildError(t *testing.T) {
 	dirPath := filepath.Join(currDir, "testdata", "build_error")
 
 	p := Package{path: dirPath}
-	if err := p.Build("/not/exist"); err == nil {
+	if err := p.Build("/not/exist", ""); err == nil {
 		t.Fatalf("nil error")
 	}
 }

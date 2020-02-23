@@ -66,7 +66,7 @@ func TestJobManager_StartAndWaitJob(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true)
+	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true, "")
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}

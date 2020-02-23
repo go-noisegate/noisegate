@@ -152,6 +152,40 @@ func TestWorker_ParallelDisabled(t *testing.T) {
 	}
 }
 
+func TestWorker_WithBuildTags(t *testing.T) {
+	tempDir, err := ioutil.TempDir("", "hornet-test")
+	if err != nil {
+		t.Errorf("failed to create the temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+	currDir, _ := os.Getwd()
+
+	job := &Job{
+		Package:        &Package{path: filepath.Join(currDir, "testdata", "buildtags")},
+		testEventCh:    make(chan TestEvent, 64),
+		EnableParallel: false,
+		BuildTags:      "example",
+	}
+	taskSet := &TaskSet{
+		Tasks:   []*Task{{TestFunction: "TestSum"}},
+		LogPath: filepath.Join(tempDir, "testlog"),
+	}
+	w := NewWorker(context.Background(), job, taskSet)
+	if err := w.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	passed, err := w.Wait()
+	if err != nil || !passed {
+		t.Fatalf("unexpected result: %v, %v", passed, err)
+	}
+
+	ev := <-job.testEventCh
+	if ev.Test != "TestSum" {
+		t.Errorf("unexpected test name: %s", ev.Test)
+	}
+}
+
 func TestTestOutputWriter(t *testing.T) {
 	ch := make(chan TestEvent, 1)
 	w := newTestOutputWriter(ch)

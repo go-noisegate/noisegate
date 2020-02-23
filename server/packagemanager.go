@@ -69,7 +69,7 @@ type Package struct {
 
 // Prebuild runs the build process for the preparation. If the pre-build process is already running,
 // the process is killed.
-// One point of this preparation is to compile dependent packages in advance.
+// Its main purpose is to compile dependent packages in advance.
 func (p *Package) Prebuild() error {
 	var ctx context.Context
 	setup := func() {
@@ -82,13 +82,13 @@ func (p *Package) Prebuild() error {
 		ctx, p.cancelFunc = context.WithCancel(context.Background())
 	}
 	setup()
-	return p.buildContext(ctx, "/dev/null")
+	return p.buildContext(ctx, "/dev/null", "")
 }
 
 // Build builds the package. Prebuild process is killed if exists.
-func (p *Package) Build(artifactPath string) error {
+func (p *Package) Build(artifactPath, buildTags string) error {
 	p.Cancel()
-	return p.buildContext(context.Background(), artifactPath)
+	return p.buildContext(context.Background(), artifactPath, buildTags)
 }
 
 // Cancel cancels the currently executing build.
@@ -105,8 +105,8 @@ func (p *Package) Cancel() {
 var patternNoTestFiles = regexp.MustCompile(`(?m)\s+\[no test files\]$`)
 var patternNoGoFiles = regexp.MustCompile(`(?m)can't load package: package .+: no Go files in `)
 
-func (p *Package) buildContext(ctx context.Context, artifactPath string) error {
-	cmd := exec.CommandContext(ctx, "go", "test", "-c", "-o", artifactPath, ".")
+func (p *Package) buildContext(ctx context.Context, artifactPath, buildTags string) error {
+	cmd := exec.CommandContext(ctx, "go", "test", "-c", "-o", artifactPath, "-tags", buildTags, ".")
 	cmd.Dir = p.path
 
 	buildLog, err := cmd.CombinedOutput()

@@ -27,7 +27,7 @@ func main() {
 					log.EnableDebugLog(c.Bool("debug"))
 
 					query := c.Args().First()
-					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, Parallel: c.String("parallel")}
+					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, Parallel: c.String("parallel"), BuildTags: c.String("tags")}
 					return client.TestAction(c.Context, query, options)
 				},
 				Flags: []cli.Flag{
@@ -36,6 +36,11 @@ func main() {
 						Aliases: []string{"p"},
 						Usage:   "enable the parallel testing [on, off or auto]. When `auto`, the tool automatically chooses the faster option.",
 						Value:   "auto",
+					},
+					&cli.StringFlag{
+						Name:  "tags",
+						Usage: "a comma-separated list of build tags.",
+						Value: "",
 					},
 				},
 			},

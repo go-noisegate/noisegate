@@ -22,6 +22,7 @@ type TestOptions struct {
 	ServerAddr string
 	TestLogger io.Writer
 	Parallel   string
+	BuildTags  string
 }
 
 // TestAction runs the test of the packages related to the specified file.
@@ -40,7 +41,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.TestRequest{Path: path, Offset: offset, Parallel: options.Parallel}
+	reqData := common.TestRequest{Path: path, Offset: offset, Parallel: options.Parallel, BuildTags: options.BuildTags}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err
@@ -57,7 +58,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		return err
 	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("failed to run the test: %s: %s", resp.Status, string(body))
+		return fmt.Errorf("failed to run the test: %s\n%s", resp.Status, string(body))
 	}
 
 	io.Copy(options.TestLogger, resp.Body)

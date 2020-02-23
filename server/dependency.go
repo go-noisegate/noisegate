@@ -141,7 +141,7 @@ func (p parsedPackage) findEnclosingIdentity(filename string, offset int) (ident
 		return true
 	})
 	if pos == token.NoPos {
-		return nil, fmt.Errorf("invalid filename or offset: %s %d", filename, offset)
+		return nil, fmt.Errorf("invalid filename or offset: %s:#%d (build tags are not specified?)", filename, offset)
 	}
 
 	f := p.pkg.Files[filename]

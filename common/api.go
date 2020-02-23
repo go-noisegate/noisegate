@@ -16,9 +16,10 @@ const (
 
 // TestRequest represents the input data to the test API.
 type TestRequest struct {
-	Path     string `json:"path"`
-	Offset   int    `json:"offset"`
-	Parallel string `json:"parallel"`
+	Path      string `json:"path"`
+	Offset    int    `json:"offset"`
+	Parallel  string `json:"parallel"`
+	BuildTags string `json:"build_tags"`
 }
 
 // valid parallel values

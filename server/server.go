@@ -151,7 +151,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, _ := s.packageManager.Find(pathDir)
 
-	job, err := NewJob(pkg, changedFilename, input.Offset, s.parallel(pkg.path, input.Parallel))
+	job, err := NewJob(pkg, changedFilename, input.Offset, s.parallel(pkg.path, input.Parallel), input.BuildTags)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)

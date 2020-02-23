@@ -27,6 +27,7 @@ type Job struct {
 	DirPath                          string
 	Status                           JobStatus
 	Package                          *Package
+	BuildTags                        string
 	TestBinaryPath                   string
 	CreatedAt, StartedAt, FinishedAt time.Time
 	// build time is not included
@@ -50,12 +51,13 @@ const (
 
 // NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
 // where the package is changed. If `changedFilename` is not empty, important test functions are executed first.
-func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParallel bool) (*Job, error) {
+func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParallel bool, tags string) (*Job, error) {
 	job := &Job{
 		ID:             generateID(),
 		DirPath:        pkg.path,
 		Package:        pkg,
 		Status:         JobStatusCreated,
+		BuildTags:      tags,
 		CreatedAt:      time.Now(),
 		EnableParallel: enableParallel,
 		testEventCh:    make(chan TestEvent), // must be unbuffered to avoid the lost result.
@@ -80,7 +82,7 @@ func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParal
 		var err error
 		if job.EnableParallel {
 			testBinaryPath = filepath.Join(sharedDir, "bin", strconv.FormatInt(job.ID, 10))
-			err = pkg.Build(testBinaryPath)
+			err = pkg.Build(testBinaryPath, tags)
 			if err != nil {
 				if err == errNoGoTestFiles {
 					err = nil
@@ -112,7 +114,9 @@ func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParal
 			defer func() {
 				log.Debugf("dep analysis time: %v\n", time.Since(start))
 			}()
-			inf, err = FindInfluencedTests(&build.Default, changedFilename, changedOffset)
+			ctxt := &build.Default
+			ctxt.BuildTags = strings.Split(tags, ",")
+			inf, err = FindInfluencedTests(ctxt, changedFilename, changedOffset)
 
 			if log.DebugLogEnabled() {
 				var fs []string
