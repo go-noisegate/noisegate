@@ -45,9 +45,9 @@ func main() {
 				},
 			},
 			{
-				Name:      "setup",
-				Aliases:   []string{"s"},
-				Usage:     "Sets up the specified file and its repository",
+				Name:      "hint",
+				Aliases:   []string{"h"},
+				Usage:     "Hint the recent change of the specified file",
 				ArgsUsage: "[target file or directory path]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
@@ -57,8 +57,8 @@ func main() {
 					log.EnableDebugLog(c.Bool("debug"))
 
 					filepath := c.Args().First()
-					options := client.SetupOptions{ServerAddr: c.String("addr")}
-					return client.SetupAction(c.Context, filepath, options)
+					options := client.HintOptions{ServerAddr: c.String("addr")}
+					return client.HintAction(c.Context, filepath, options)
 				},
 			},
 		},

@@ -10,8 +10,8 @@ const cliAPIPrefix = "/cli"
 
 // the API pathes
 const (
-	TestPath  = cliAPIPrefix + "/test"
-	SetupPath = cliAPIPrefix + "/setup"
+	TestPath = cliAPIPrefix + "/test"
+	HintPath = cliAPIPrefix + "/hint"
 )
 
 // TestRequest represents the input data to the test API.
@@ -29,7 +29,8 @@ const (
 	ParallelAuto = "auto"
 )
 
-// SetupRequest represents the input data to the setup API.
-type SetupRequest struct {
-	Path string `json:"path"`
+// HintRequest represents the input data to the hint API.
+type HintRequest struct {
+	Path   string `json:"path"`
+	Offset int    `json:"offset"`
 }

@@ -100,24 +100,24 @@ func TestTestAction_InvalidPathAndOffset(t *testing.T) {
 	}
 }
 
-func TestSetupAction(t *testing.T) {
+func TestHintAction(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc(common.SetupPath, func(w http.ResponseWriter, r *http.Request) {})
+	mux.HandleFunc(common.HintPath, func(w http.ResponseWriter, r *http.Request) {})
 	server := httptest.NewServer(mux)
 
-	testfile := "/path/to/test/file"
-	options := client.SetupOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://")}
-	err := client.SetupAction(context.Background(), testfile, options)
+	query := "/path/to/test/file:#1"
+	options := client.HintOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://")}
+	err := client.HintAction(context.Background(), query, options)
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func TestSetupAction_RelativePath(t *testing.T) {
+func TestHintAction_RelativePath(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc(common.SetupPath, func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(common.HintPath, func(w http.ResponseWriter, r *http.Request) {
 		data, _ := ioutil.ReadAll(r.Body)
-		req := common.SetupRequest{}
+		req := common.HintRequest{}
 		if err := json.Unmarshal(data, &req); err != nil {
 			t.Errorf("failed to decode: %v", err)
 		}
@@ -128,8 +128,8 @@ func TestSetupAction_RelativePath(t *testing.T) {
 	server := httptest.NewServer(mux)
 
 	testfile := "test/file"
-	options := client.SetupOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://")}
-	err := client.SetupAction(context.Background(), testfile, options)
+	options := client.HintOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://")}
+	err := client.HintAction(context.Background(), testfile, options)
 	if err != nil {
 		t.Error(err)
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/ks888/hornet/common"
 )
 
-func TestHandleSetup(t *testing.T) {
+func TestHandleHint(t *testing.T) {
 	server := NewHornetServer("", 1)
 
 	curr, err := os.Getwd()
@@ -23,9 +23,9 @@ func TestHandleSetup(t *testing.T) {
 		t.Fatalf("failed to get wd: %v", err)
 	}
 	path := filepath.Join(curr, "testdata", "sum.go")
-	req := httptest.NewRequest("GET", common.SetupPath, strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
+	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
-	server.handleSetup(w, req)
+	server.handleHint(w, req)
 	if w.Code != http.StatusOK {
 		t.Errorf("unexpected code: %d", w.Code)
 	}
@@ -36,36 +36,36 @@ func TestHandleSetup(t *testing.T) {
 	}
 }
 
-func TestHandleSetup_InvalidJSON(t *testing.T) {
+func TestHandleHint_InvalidJSON(t *testing.T) {
 	server := NewHornetServer("", 1)
 
-	req := httptest.NewRequest("GET", common.SetupPath, strings.NewReader(`{`))
+	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(`{`))
 	w := httptest.NewRecorder()
-	server.handleSetup(w, req)
+	server.handleHint(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("unexpected code: %d", w.Code)
 	}
 }
 
-func TestHandleSetup_RelativePath(t *testing.T) {
+func TestHandleHint_RelativePath(t *testing.T) {
 	server := NewHornetServer("", 1)
 
-	req := httptest.NewRequest("GET", common.SetupPath, strings.NewReader(`{"path": "rel/path"}`))
+	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(`{"path": "rel/path"}`))
 	w := httptest.NewRecorder()
-	server.handleSetup(w, req)
+	server.handleHint(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("unexpected code: %d", w.Code)
 	}
 }
 
-func TestHandleSetup_PathNotFound(t *testing.T) {
+func TestHandleHint_PathNotFound(t *testing.T) {
 	server := NewHornetServer("", 1)
 
-	req := httptest.NewRequest("GET", common.SetupPath, strings.NewReader(`{"path": "/path/to/not/exist/file"}`))
+	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(`{"path": "/path/to/not/exist/file"}`))
 	w := httptest.NewRecorder()
-	server.handleSetup(w, req)
+	server.handleHint(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("unexpected code: %d", w.Code)

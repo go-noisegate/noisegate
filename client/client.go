@@ -58,7 +58,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		return err
 	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("failed to run the test: %s\n%s", resp.Status, string(body))
+		return fmt.Errorf("failed to run the test: %s:\n%s", resp.Status, string(body))
 	}
 
 	io.Copy(options.TestLogger, resp.Body)
@@ -86,14 +86,19 @@ func parseQuery(pathAndOffset string) (string, int, error) {
 	return path, offset, nil
 }
 
-// SetupOptions represents the options which the setup action accepts.
-type SetupOptions struct {
+// HintOptions represents the options which the hint action accepts.
+type HintOptions struct {
 	ServerAddr string
 }
 
-// SetupAction sets up the repository to which the specified file belongs.
+// HintAction hints the recent change of the specified file.
 // If the path is relative, it assumes it's the relative path from the current working directory.
-func SetupAction(ctx context.Context, path string, options SetupOptions) error {
+func HintAction(ctx context.Context, query string, options HintOptions) error {
+	path, offset, err := parseQuery(query)
+	if err != nil {
+		return err
+	}
+
 	if !filepath.IsAbs(path) {
 		curr, err := os.Getwd()
 		if err != nil {
@@ -102,13 +107,13 @@ func SetupAction(ctx context.Context, path string, options SetupOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.SetupRequest{Path: path}
+	reqData := common.HintRequest{Path: path, Offset: offset}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("http://%s%s", options.ServerAddr, common.SetupPath)
+	url := fmt.Sprintf("http://%s%s", options.ServerAddr, common.HintPath)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return err
@@ -119,7 +124,7 @@ func SetupAction(ctx context.Context, path string, options SetupOptions) error {
 		return err
 	} else if resp.StatusCode != http.StatusOK {
 		body, _ := ioutil.ReadAll(resp.Body)
-		return fmt.Errorf("failed to setup the repository: %s: %s", resp.Status, string(body))
+		return fmt.Errorf("failed to hint the recent change: %s:\n%s", resp.Status, string(body))
 	}
 
 	return nil

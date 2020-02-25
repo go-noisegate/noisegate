@@ -51,7 +51,7 @@ func NewHornetServer(addr string, defaultNumWorkers int) HornetServer {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(common.TestPath, s.handleTest)
-	mux.HandleFunc(common.SetupPath, s.handleSetup)
+	mux.HandleFunc(common.HintPath, s.handleHint)
 	s.Server = &http.Server{
 		Handler: mux,
 		Addr:    addr,
@@ -64,8 +64,8 @@ func (s HornetServer) Shutdown(ctx context.Context) error {
 	return s.Server.Shutdown(ctx)
 }
 
-func (s HornetServer) handleSetup(w http.ResponseWriter, r *http.Request) {
-	var input common.SetupRequest
+func (s HornetServer) handleHint(w http.ResponseWriter, r *http.Request) {
+	var input common.HintRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -84,7 +84,7 @@ func (s HornetServer) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("setup %s\n", input.Path)
+	log.Printf("hint %s:#%d\n", input.Path, input.Offset)
 
 	if err := s.prebuild(input.Path); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
