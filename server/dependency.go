@@ -20,7 +20,9 @@ type influence struct {
 	to   map[string]struct{}
 }
 
-// FindInfluencedTests finds the test functions which related to the specified `filename` and offset`. `filename` must be abs.
+// FindInfluencedTests finds the test functions which related to the specified `filename` and offset`.
+// `filename` must be abs.
+// The files specified in the `changes` must share the same directory.
 // summary:
 // 1. Finds the top-level declaration which encloses the specified offset.
 // 2-1. If the decl is the test function itself, returns the test function.
@@ -28,51 +30,31 @@ type influence struct {
 //   For example, if the offset specifies the last line of some non-test function, it finds the name of the function (e.g. `Sum`) first,
 //   and then finds the test functions which directly call the function (e.g. `TestSum1` and `TestSum2`).
 // Note that if the found test function is a part of the test suite, the runner function of the test suite is returned.
-func FindInfluencedTests(ctxt *build.Context, filename string, offset int) (influence, error) {
-	pkg, err := newParsedPackage(ctxt, filepath.Dir(filename))
+func FindInfluencedTests(ctxt *build.Context, changes []change) ([]influence, error) {
+	if len(changes) == 0 {
+		return nil, nil
+	}
+	dir := filepath.Dir(changes[0].filename)
+	pkg, err := newParsedPackage(ctxt, dir)
 	if err != nil {
 		if _, ok := err.(*build.NoGoError); ok {
-			return influence{}, nil
+			return nil, nil
 		}
-		return influence{}, err
+		return nil, err
 	}
 
-	id, err := pkg.findEnclosingIdentity(filename, offset)
-	if err != nil {
-		return influence{}, err
-	}
-
-	if id == nil {
-		return influence{}, nil
-	} else if id.IsTestFunc() {
-		to := make(map[string]struct{})
-		name := id.Name()
-		if index := strings.Index(name, "."); index != -1 {
-			// TODO: workaround to support test suite. Consider more precise approach.
-			for _, t := range []string{"Test_", "Test"} {
-				if pkg.pkg.Scope.Lookup(t+name[:index]) != nil {
-					to[t+name[:index]] = struct{}{}
-				}
-			}
-		} else {
-			to[name] = struct{}{}
+	var ins []influence
+	for _, ch := range changes {
+		in, err := pkg.findInfluence(ch)
+		if err != nil {
+			log.Print(err)
+			continue
 		}
-		return influence{from: id, to: to}, nil
-	}
-	log.Debugf("find not-test enclosing identity: %s", id.Name())
-
-	users, err := pkg.findUsers(id)
-	if err != nil {
-		return influence{}, err
-	}
-
-	set := make(map[string]struct{})
-	for _, u := range users {
-		if f := pkg.findTestFunction(u); f != "" {
-			set[f] = struct{}{}
+		if len(in.to) > 0 {
+			ins = append(ins, in)
 		}
 	}
-	return influence{from: id, to: set}, nil
+	return ins, nil
 }
 
 type parsedPackage struct {
@@ -122,6 +104,45 @@ func newParsedPackage(ctxt *build.Context, packageDir string) (parsedPackage, er
 	}
 	_, _ = conf.Check(astPkg.Name, fset, files, &info)
 	return parsedPackage{pkgDir: packageDir, pkg: astPkg, fset: fset, info: &info}, nil
+}
+
+func (p parsedPackage) findInfluence(ch change) (influence, error) {
+	id, err := p.findEnclosingIdentity(ch.filename, ch.offset)
+	if err != nil {
+		return influence{}, err
+	}
+
+	if id == nil {
+		return influence{}, nil
+	} else if id.IsTestFunc() {
+		to := make(map[string]struct{})
+		name := id.Name()
+		if index := strings.Index(name, "."); index != -1 {
+			// TODO: workaround to support test suite. Consider more precise approach.
+			for _, t := range []string{"Test_", "Test"} {
+				if p.pkg.Scope.Lookup(t+name[:index]) != nil {
+					to[t+name[:index]] = struct{}{}
+				}
+			}
+		} else {
+			to[name] = struct{}{}
+		}
+		return influence{from: id, to: to}, nil
+	}
+	log.Debugf("find not-test enclosing identity: %s", id.Name())
+
+	users, err := p.findUsers(id)
+	if err != nil {
+		return influence{}, err
+	}
+
+	set := make(map[string]struct{})
+	for _, u := range users {
+		if f := p.findTestFunction(u); f != "" {
+			set[f] = struct{}{}
+		}
+	}
+	return influence{from: id, to: set}, nil
 }
 
 // findEnclosingIdentity finds the top level declaration to which the node at the specified `offset` belongs.

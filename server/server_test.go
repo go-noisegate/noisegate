@@ -34,6 +34,10 @@ func TestHandleHint(t *testing.T) {
 	if string(out) != "accepted\n" {
 		t.Errorf("unexpected response body: %s", string(out))
 	}
+
+	if changes := server.changeManager.Find(filepath.Dir(path)); len(changes) != 1 {
+		t.Errorf("wrong changes: %#v", changes)
+	}
 }
 
 func TestHandleHint_InvalidJSON(t *testing.T) {

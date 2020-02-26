@@ -32,7 +32,7 @@ func TestNewJob(t *testing.T) {
 	}
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true, "")
+	job, err := NewJob(&Package{path: dirPath}, []change{{filepath.Join(dirPath, "sum.go"), 0}}, true, "")
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestNewJob_ParallelDisabled(t *testing.T) {
 	}
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, false, "")
+	job, err := NewJob(&Package{path: dirPath}, []change{{filepath.Join(dirPath, "sum.go"), 0}}, false, "")
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestNewJob_ParallelDisabled(t *testing.T) {
 
 func TestNewJob_InvalidDirPath(t *testing.T) {
 	dirPath := "/not/exist/dir"
-	_, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true, "")
+	_, err := NewJob(&Package{path: dirPath}, []change{{filepath.Join(dirPath, "sum.go"), 0}}, true, "")
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
-				job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "README.md"), 0, true, "")
+				job, err := NewJob(&Package{path: dirPath}, []change{{filepath.Join(dirPath, "README.md"), 0}}, true, "")
 				if err != nil {
 					panic(err)
 				}
@@ -122,20 +122,23 @@ func TestNewJob_WithBuildTags(t *testing.T) {
 	}
 	dirPath := filepath.Join(currDir, "testdata", "buildtags")
 
-	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 63, true, "example")
+	job, err := NewJob(&Package{path: dirPath}, []change{{filepath.Join(dirPath, "sum.go"), 63}}, true, "example")
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
 	if job.BuildTags != "example" {
 		t.Errorf("wrong bulid tags: %s", job.BuildTags)
 	}
-	if job.influence.from.Name() != "Sum" {
-		t.Errorf("wrong influence from: %s", job.influence.from.Name())
+	if len(job.influences) != 1 {
+		t.Fatalf("wrong # of influences: %v", len(job.influences))
 	}
-	if len(job.influence.to) != 1 {
-		t.Errorf("wrong influence to: %d", len(job.influence.to))
+	if job.influences[0].from.Name() != "Sum" {
+		t.Errorf("wrong influence from: %s", job.influences[0].from.Name())
 	}
-	if _, ok := job.influence.to["TestSum"]; !ok {
+	if len(job.influences[0].to) != 1 {
+		t.Errorf("wrong influence to: %d", len(job.influences[0].to))
+	}
+	if _, ok := job.influences[0].to["TestSum"]; !ok {
 		t.Errorf("wrong influence to: TestSum not exist")
 	}
 }
@@ -144,7 +147,7 @@ func TestJob_Wait(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(&Package{path: dirPath}, filepath.Join(dirPath, "sum.go"), 0, true, "")
+	job, err := NewJob(&Package{path: dirPath}, []change{{filepath.Join(dirPath, "sum.go"), 0}}, true, "")
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}

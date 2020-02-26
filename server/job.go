@@ -35,7 +35,7 @@ type Job struct {
 	TaskSets        []*TaskSet
 	Tasks           []*Task
 	EnableParallel  bool
-	influence       influence
+	influences      []influence
 	testEventCh     chan TestEvent
 	jobFinishedCh   chan struct{}
 }
@@ -51,7 +51,7 @@ const (
 
 // NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
 // where the package is changed. If `changedFilename` is not empty, important test functions are executed first.
-func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParallel bool, tags string) (*Job, error) {
+func NewJob(pkg *Package, changes []change, enableParallel bool, tags string) (*Job, error) {
 	job := &Job{
 		ID:             generateID(),
 		DirPath:        pkg.path,
@@ -67,7 +67,7 @@ func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParal
 	errCh := make(chan error)
 	binaryPathCh := make(chan string, 1) // to avoid go routine leaks
 	funcNamesCh := make(chan []string, 1)
-	influenceCh := make(chan influence, 1)
+	influencesCh := make(chan []influence, 1)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -107,27 +107,29 @@ func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParal
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		var inf influence
+		var infs []influence
 		var err error
-		if changedFilename != "" {
+		if len(changes) > 0 {
 			start := time.Now()
 			defer func() {
 				log.Debugf("dep analysis time: %v\n", time.Since(start))
 			}()
 			ctxt := &build.Default
 			ctxt.BuildTags = strings.Split(tags, ",")
-			inf, err = FindInfluencedTests(ctxt, changedFilename, changedOffset)
+			infs, err = FindInfluencedTests(ctxt, changes)
 
 			if log.DebugLogEnabled() {
-				var fs []string
-				for f := range inf.to {
-					fs = append(fs, f)
+				for _, inf := range infs {
+					var fs []string
+					for f := range inf.to {
+						fs = append(fs, f)
+					}
+					log.Debugf("%v -> [%v]\n", inf.from, strings.Join(fs, ", "))
 				}
-				log.Debugf("%v -> [%v]\n", inf.from, strings.Join(fs, ", "))
 			}
 		}
 		errCh <- err
-		influenceCh <- inf
+		influencesCh <- infs
 	}()
 
 	go func() {
@@ -140,12 +142,19 @@ func NewJob(pkg *Package, changedFilename string, changedOffset int, enableParal
 		err = multierr.Combine(err, e)
 	}
 	// assumes the go routines send the data anyway
-	job.TestBinaryPath = <-binaryPathCh
-	job.influence = <-influenceCh
+	job.influences = <-influencesCh
+	influenced := make(map[string]struct{})
+	for _, inf := range job.influences {
+		for k := range inf.to {
+			influenced[k] = struct{}{}
+		}
+	}
+
 	for _, testFuncName := range <-funcNamesCh {
-		_, ok := job.influence.to[testFuncName]
+		_, ok := influenced[testFuncName]
 		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Important: ok, Job: job})
 	}
+	job.TestBinaryPath = <-binaryPathCh
 
 	if err != nil {
 		job.clean()

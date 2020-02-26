@@ -35,6 +35,7 @@ type HornetServer struct {
 	jobManager        *JobManager
 	packageManager    *PackageManager
 	jobProfiler       *JobProfiler
+	changeManager     ChangeManager
 	defaultNumWorkers int
 	depthLimit        int
 }
@@ -47,6 +48,7 @@ func NewHornetServer(addr string, defaultNumWorkers int) HornetServer {
 		packageManager:    NewPackageManager(),
 		defaultNumWorkers: defaultNumWorkers,
 		jobProfiler:       NewJobProfiler(),
+		changeManager:     NewChangeManager(),
 	}
 
 	mux := http.NewServeMux()
@@ -78,13 +80,18 @@ func (s HornetServer) handleHint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := os.Stat(input.Path); os.IsNotExist(err) {
+	fi, err := os.Stat(input.Path)
+	if os.IsNotExist(err) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("the specified path not found\n"))
 		return
 	}
 
 	log.Printf("hint %s:#%d\n", input.Path, input.Offset)
+
+	if !fi.IsDir() {
+		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Offset})
+	}
 
 	if err := s.prebuild(input.Path); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -136,10 +143,9 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pathDir := input.Path
-	changedFilename := ""
 	if !fi.IsDir() {
 		pathDir = filepath.Dir(input.Path)
-		changedFilename = input.Path
+		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Offset})
 	}
 
 	log.Printf("test %s:#%d\n", input.Path, input.Offset)
@@ -151,7 +157,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 	pkg, _ := s.packageManager.Find(pathDir)
 
-	job, err := NewJob(pkg, changedFilename, input.Offset, s.parallel(pkg.path, input.Parallel), input.BuildTags)
+	job, err := NewJob(pkg, s.changeManager.Pop(pathDir), s.parallel(pkg.path, input.Parallel), input.BuildTags)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -161,7 +167,11 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respWriter := newFlushWriter(w)
-	if len(job.influence.to) == 0 {
+	numInfluenced := 0
+	for _, inf := range job.influences {
+		numInfluenced += len(inf.to)
+	}
+	if numInfluenced == 0 {
 		respWriter.Write([]byte("No important tests. Run all the tests:\n"))
 	} else {
 		respWriter.Write([]byte("Found important tests. Run them first:\n"))

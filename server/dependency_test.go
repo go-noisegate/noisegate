@@ -13,17 +13,20 @@ import (
 func TestFindInfluencedTests_Function(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum.go")
-	influence, err := FindInfluencedTests(&build.Default, pkgPath, 35)
+	influences, err := FindInfluencedTests(&build.Default, []change{{pkgPath, 35}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(influence.to) != 2 {
-		t.Fatalf("wrong # of funcs: %d", len(influence.to))
+	if len(influences) != 1 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
 	}
-	if _, ok := influence.to["TestSum"]; !ok {
+	if len(influences[0].to) != 2 {
+		t.Fatalf("wrong # of funcs: %d", len(influences[0].to))
+	}
+	if _, ok := influences[0].to["TestSum"]; !ok {
 		t.Errorf("no expected func")
 	}
-	if _, ok := influence.to["TestExampleTestSuite"]; !ok {
+	if _, ok := influences[0].to["TestExampleTestSuite"]; !ok {
 		t.Errorf("no expected func")
 	}
 }
@@ -31,14 +34,17 @@ func TestFindInfluencedTests_Function(t *testing.T) {
 func TestFindInfluencedTests_TestFunction(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	influence, err := FindInfluencedTests(&build.Default, pkgPath, 67)
+	influences, err := FindInfluencedTests(&build.Default, []change{{pkgPath, 67}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(influence.to) != 1 {
-		t.Fatalf("wrong # of funcs: %d", len(influence.to))
+	if len(influences) != 1 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
 	}
-	if _, ok := influence.to["TestSum"]; !ok {
+	if len(influences[0].to) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(influences[0].to))
+	}
+	if _, ok := influences[0].to["TestSum"]; !ok {
 		t.Errorf("no expected func")
 	}
 }
@@ -46,39 +52,54 @@ func TestFindInfluencedTests_TestFunction(t *testing.T) {
 func TestFindInfluencedTests_TestSuite(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	influence, err := FindInfluencedTests(&build.Default, pkgPath, 304)
+	influences, err := FindInfluencedTests(&build.Default, []change{{pkgPath, 304}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(influence.to) != 1 {
-		t.Fatalf("wrong # of funcs: %d", len(influence.to))
+	if len(influences) != 1 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
 	}
-	if _, ok := influence.to["TestExampleTestSuite"]; !ok {
-		t.Errorf("no expected func: %#v", influence.to)
+	if len(influences[0].to) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(influences[0].to))
+	}
+	if _, ok := influences[0].to["TestExampleTestSuite"]; !ok {
+		t.Errorf("no expected func: %#v", influences[0].to)
 	}
 }
 
 func TestFindInfluencedTests_IdentityNotFound(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	influence, err := FindInfluencedTests(&build.Default, pkgPath, 0)
+	influences, err := FindInfluencedTests(&build.Default, []change{{pkgPath, 0}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(influence.to) != 0 {
-		t.Fatalf("wrong # of funcs: %d", len(influence.to))
+	if len(influences) != 0 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
 	}
 }
 
 func TestFindInfluencedTests_NoGoDirectory(t *testing.T) {
 	cwd, _ := os.Getwd()
 	pkgPath := filepath.Join(cwd, "testdata", "no_go_files", "README.md")
-	influence, err := FindInfluencedTests(&build.Default, pkgPath, 0)
+	influences, err := FindInfluencedTests(&build.Default, []change{{pkgPath, 0}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(influence.to) != 0 {
-		t.Fatalf("wrong # of funcs: %d", len(influence.to))
+	if len(influences) != 0 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
+	}
+}
+
+func TestFindInfluencedTests_SomeChanges(t *testing.T) {
+	cwd, _ := os.Getwd()
+	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum.go")
+	influences, err := FindInfluencedTests(&build.Default, []change{{pkgPath, 35}, {pkgPath, 67}, {pkgPath, 304}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(influences) != 3 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
 	}
 }
 
