@@ -48,7 +48,7 @@ func main() {
 				Name:      "hint",
 				Aliases:   []string{"h"},
 				Usage:     "Hint the recent change of the specified file",
-				ArgsUsage: "[target file or directory path]",
+				ArgsUsage: "[changed_file_path:#offset (e.g. sum.go:#1)]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
 						return errors.New("the target file or directory path is not specified")
