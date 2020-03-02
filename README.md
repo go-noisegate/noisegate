@@ -25,9 +25,9 @@ Hornet works with your editor and so the next step depends on your editor:
 
 (If your favorite editor is not here, please consider writing the plugin for your editor!)
 
-## Tutorial
+## Quickstart
 
-You usually run the hornet via the editor plugin. So check out the tutorial document of the plugin you installed:
+You usually run the hornet via the editor plugin. So check out the quickstart document of the plugin you installed:
 * [emacs]()
 * [vscode]()
 
@@ -35,7 +35,7 @@ The document below assumes you run the hornet directly, but it's not so common.
 
 --
 
-In this tutorial, you will learn how to use the hornet to help your coding.
+This quickstart shows you how to use hornet to help your coding.
 
 ### Set up
 
@@ -45,7 +45,7 @@ In this tutorial, you will learn how to use the hornet to help your coding.
    $ hornetd
    ```
 
-2. Download the sample repository which demonstrates the usage of hornet.
+2. Download the sample repository.
 
    ```sh
    $ go get -u github.com/ks888/hornet-tutorial
@@ -53,7 +53,7 @@ In this tutorial, you will learn how to use the hornet to help your coding.
 
 ### Coding
 
-Let's assume you just implemented the [functions](TODO-link) and [tests](TODO-link) in the `hornet-tutorial` repository.
+Let's assume you just implemented some [functions](https://github.com/ks888/hornet-tutorial/blob/master/math.go) (`SlowAdd` and `SlowSub`) and [tests](https://github.com/ks888/hornet-tutorial/blob/master/math_test.go) (`TestSlowAdd`, `TestSlowAdd_Overflow` and `TestSlowSub`) in the `hornet-tutorial` repository.
 
 1. Run the tests
 
@@ -80,7 +80,7 @@ Let's assume you just implemented the [functions](TODO-link) and [tests](TODO-li
 
 3. Hint the change of the `math.go`
 
-   Run the `hornet hint` to notify the hornet server of the change of the `math.go`.
+   Run the `hornet hint` to notify the hornet server of the changed filename and position.
 
    ```sh
    hornet hint math.go:#176
@@ -106,13 +106,13 @@ Let's assume you just implemented the [functions](TODO-link) and [tests](TODO-li
    PASS (1.033799777s)
    ```
 
-   Based on the hint, hornet runs `TestSlowSub` first because it's affected by the previous changes. Then, runs remaining tests.
+   Based on the hint, hornet runs `TestSlowSub` first because it's affected by the previous change.
 
    Note that the total test time is `1.033799777s` here because the tests run in parallel. When you run the same tests using `go test`, it will take about 3 seconds.
 
 ## How-to guides
 
-### Run the tests in sequence
+### Run tests in sequence
 
 Some tests fail when they are executed in parallel. You can use the `--parallel` or `-p` option to run them in sequence.
 
@@ -127,3 +127,4 @@ It's same as `go test`.
 ```
 $ hornet test --tags tags,list [filename:#offset]
 ```
+

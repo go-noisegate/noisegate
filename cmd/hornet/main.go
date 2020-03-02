@@ -46,7 +46,6 @@ func main() {
 			},
 			{
 				Name:      "hint",
-				Aliases:   []string{"h"},
 				Usage:     "Hint the recent change of the specified file",
 				ArgsUsage: "[changed_file_path:#offset (e.g. sum.go:#1)]",
 				Action: func(c *cli.Context) error {

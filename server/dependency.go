@@ -73,7 +73,7 @@ func newParsedPackage(ctxt *build.Context, packageDir string) (parsedPackage, er
 
 	filenames := pkg.GoFiles
 	filenames = append(filenames, pkg.TestGoFiles...)
-	filenames = append(filenames, pkg.CgoFiles...)
+	filenames = append(filenames, pkg.XTestGoFiles...) // TODO: better XTest package support
 
 	fset := token.NewFileSet()
 	parsedFiles := make(map[string]*ast.File)
