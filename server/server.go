@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -92,33 +91,7 @@ func (s HornetServer) handleHint(w http.ResponseWriter, r *http.Request) {
 	if !fi.IsDir() {
 		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Offset})
 	}
-
-	if err := s.prebuild(input.Path); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Print(err)
-		return
-	}
 	w.Write([]byte("accepted\n"))
-}
-
-func (s HornetServer) prebuild(path string) error {
-	if err := s.packageManager.Watch(path); err != nil {
-		return fmt.Errorf("failed to watch %s: %v", path, err)
-	}
-
-	go func() {
-		start := time.Now()
-
-		pkg, _ := s.packageManager.Find(path)
-		if err := pkg.Prebuild(); err != nil {
-			if !errors.Is(err, context.Canceled) {
-				log.Debugf("failed to prebuild: %v", err)
-			}
-			return
-		}
-		log.Debugf("prebuild time: %v\n", time.Since(start))
-	}()
-	return nil
 }
 
 func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {

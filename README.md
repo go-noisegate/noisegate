@@ -4,7 +4,7 @@ Hornet is the Golang test runner for the speedster, designed to minimize the tim
 
 The core features are:
 * Change Oriented: by the integration with your editor, hornet knows what changes you made and runs the tests affected by these changes first.
-* Tuned for Speed: hornet implements some strategies to run the tests faster, including tests in parallel and the package pre-building. You may disable these features for safety.
+* Tuned for Speed: hornet implements some strategies to run the tests faster, including tests in parallel. You may disable these features for safety.
 
 ## Prerequisites
 
