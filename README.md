@@ -76,7 +76,7 @@ Let's assume you just implemented some [functions](https://github.com/ks888/horn
 
 2. Fix the bug
 
-   Open the `math.go` and fix the `SlowSub` function. `return a + b` at the line 12 should be `return a - b`.
+   Open the `math.go` and fix [the `SlowSub` function](https://github.com/ks888/hornet-tutorial/blob/master/math.go#L12). `return a + b` at the line 12 should be `return a - b`.
 
 3. Hint the change of the `math.go`
 

@@ -124,7 +124,7 @@ func NewJob(pkg *Package, changes []change, enableParallel bool, tags string) (*
 					for f := range inf.to {
 						fs = append(fs, f)
 					}
-					log.Debugf("%v -> [%v]\n", inf.from, strings.Join(fs, ", "))
+					log.Debugf("%v -> [%v]\n", inf.from.Name(), strings.Join(fs, ", "))
 				}
 			}
 		}

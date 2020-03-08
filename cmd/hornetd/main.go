@@ -13,7 +13,7 @@ import (
 
 	"github.com/ks888/hornet/common/log"
 	"github.com/ks888/hornet/server"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 func main() {
