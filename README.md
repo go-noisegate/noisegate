@@ -1,35 +1,23 @@
 # Hornet
 
-Hornet is the Golang test runner for the speedster, designed to minimize the time to find the failed test case.
+Hornet is the Golang test runner for the speedster.
 
 The core features are:
-* Change Oriented: by the integration with your editor, hornet knows what changes you made and runs the tests affected by these changes first.
-* Tuned for Speed: hornet implements some strategies to run the tests faster, including tests in parallel. You may disable these features for safety.
+* **Change-driven**: by the editor integration, hornet knows what changes you made and runs the tests affected by these changes first.
+* **Tuned for high-speed**: hornet implements some strategies to run the tests faster, including tests in parallel. You may disable these features for safety.
 
 ## Prerequisites
 
 * Go 1.13 or later
 * Linux or Mac OS X
 
-## Install
-
-Hornet has the server program (`hornetd`) and client program (`hornet`). Install both:
-
-```sh
-$ go get -u github.com/ks888/hornet/cmd/hornet && go get -u github.com/ks888/hornet/cmd/hornetd
-```
-
-Hornet works with your editor and so the next step depends on your editor:
-* [emacs]()
-* [vscode]()
-
-(If your favorite editor is not here, please consider writing the plugin for your editor!)
-
 ## Quickstart
 
 You usually run the hornet via the editor plugin. So check out the quickstart document of the plugin you installed:
-* [emacs]()
-* [vscode]()
+* [emacs](https://github.com/ks888/hornet.el#quickstart)
+* [vscode](https://github.com/ks888/vscode-go-hornet#quickstart)
+
+(If your favorite editor is not here, please consider writing the plugin for your editor!)
 
 The document below assumes you run the hornet directly, but it's not so common.
 
@@ -39,13 +27,19 @@ This quickstart shows you how to use hornet to help your coding.
 
 ### Set up
 
-1. Run the server program (`hornetd`) if it's not running yet.
+1. Hornet has the server program (`hornetd`) and client program (`hornet`). Install both:
+
+   ```sh
+   $ go get -u github.com/ks888/hornet/cmd/hornet && go get -u github.com/ks888/hornet/cmd/hornetd
+   ```
+
+2. Run the server program (`hornetd`) if it's not running yet.
 
    ```sh
    $ hornetd
    ```
 
-2. Download the sample repository.
+3. Download the sample repository.
 
    ```sh
    $ go get -u github.com/ks888/hornet-tutorial
@@ -55,11 +49,12 @@ This quickstart shows you how to use hornet to help your coding.
 
 Let's assume you just implemented some [functions](https://github.com/ks888/hornet-tutorial/blob/master/math.go) (`SlowAdd` and `SlowSub`) and [tests](https://github.com/ks888/hornet-tutorial/blob/master/math_test.go) (`TestSlowAdd`, `TestSlowAdd_Overflow` and `TestSlowSub`) in the `hornet-tutorial` repository.
 
-1. Run the tests
+1. Run your first tests
 
    Run the `hornet test` at the repository root. It runs all the tests in the package.
 
    ```sh
+   $ cd $GOPATH/src/github.com/ks888/hornet-tutorial
    $ hornet test .   # absolute path is also ok
    No important tests. Run all the tests:
    === RUN   TestSlowAdd
@@ -74,6 +69,8 @@ Let's assume you just implemented some [functions](https://github.com/ks888/horn
 
    Obviously there is one failed test.
 
+   Also, the total test time is `1.033450365s` because the tests run in parallel. When you run the same tests using `go test`, it takes about 3 seconds.
+
 2. Fix the bug
 
    Open the `math.go` and fix [the `SlowSub` function](https://github.com/ks888/hornet-tutorial/blob/master/math.go#L12). `return a + b` at the line 12 should be `return a - b`.
@@ -83,17 +80,17 @@ Let's assume you just implemented some [functions](https://github.com/ks888/horn
    Run the `hornet hint` to notify the hornet server of the changed filename and position.
 
    ```sh
-   hornet hint math.go:#176
+   $ hornet hint math.go:#176
    ```
 
-   `176` is the byte offset and it points to the `-` character at the line you changed. This is bothersome, but usually the editor plugin runs this command automatically.
+   `176` is the byte offset and it points to the `-` character at the line you changed. Usually your editor plugin calculates this offset.
 
 4. Run the tests again
 
    When you run the `hornet test` again, the previous hint is considered.
 
    ```sh
-   $ hornet test .   # [filepath:#offset] is also ok
+   $ hornet test .
    Found important tests. Run them first:
    === RUN   TestSlowSub
    --- PASS: TestSlowSub (1.00s)
@@ -106,9 +103,7 @@ Let's assume you just implemented some [functions](https://github.com/ks888/horn
    PASS (1.033799777s)
    ```
 
-   Based on the hint, hornet runs `TestSlowSub` first because it's affected by the previous change.
-
-   Note that the total test time is `1.033799777s` here because the tests run in parallel. When you run the same tests using `go test`, it will take about 3 seconds.
+   *Based on the hint, hornet runs `TestSlowSub` first because it's affected by the previous change.*
 
 ## How-to guides
 
