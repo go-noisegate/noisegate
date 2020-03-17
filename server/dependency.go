@@ -45,13 +45,15 @@ func FindInfluencedTests(ctxt *build.Context, changes []change) ([]influence, er
 
 	var ins []influence
 	for _, ch := range changes {
-		in, err := pkg.findInfluence(ch)
-		if err != nil {
-			log.Print(err)
-			continue
-		}
-		if len(in.to) > 0 {
-			ins = append(ins, in)
+		for offset := ch.begin; offset <= ch.end; offset++ {
+			in, err := pkg.findInfluence(ch.filename, offset)
+			if err != nil {
+				log.Print(err)
+				continue
+			}
+			if in.from != nil {
+				ins = append(ins, in)
+			}
 		}
 	}
 	return ins, nil
@@ -62,6 +64,7 @@ type parsedPackage struct {
 	pkg    *ast.Package
 	fset   *token.FileSet
 	info   *types.Info
+	found  map[string]struct{}
 }
 
 // `packageDir` must be abs.
@@ -103,18 +106,24 @@ func newParsedPackage(ctxt *build.Context, packageDir string) (parsedPackage, er
 		// log.Debugf("type check error: %v", err) // too verbose and less important in our case
 	}
 	_, _ = conf.Check(astPkg.Name, fset, files, &info)
-	return parsedPackage{pkgDir: packageDir, pkg: astPkg, fset: fset, info: &info}, nil
+	return parsedPackage{pkgDir: packageDir, pkg: astPkg, fset: fset, info: &info, found: make(map[string]struct{})}, nil
 }
 
-func (p parsedPackage) findInfluence(ch change) (influence, error) {
-	id, err := p.findEnclosingIdentity(ch.filename, ch.offset)
+func (p parsedPackage) findInfluence(filename string, offset int) (influence, error) {
+	id, err := p.findEnclosingIdentity(filename, offset)
 	if err != nil {
 		return influence{}, err
 	}
-
 	if id == nil {
 		return influence{}, nil
-	} else if id.IsTestFunc() {
+	}
+
+	if _, ok := p.found[id.Name()]; ok {
+		return influence{}, nil
+	}
+	p.found[id.Name()] = struct{}{}
+
+	if id.IsTestFunc() {
 		to := make(map[string]struct{})
 		name := id.Name()
 		if index := strings.Index(name, "."); index != -1 {
@@ -129,7 +138,6 @@ func (p parsedPackage) findInfluence(ch change) (influence, error) {
 		}
 		return influence{from: id, to: to}, nil
 	}
-	log.Debugf("find not-test enclosing identity: %s", id.Name())
 
 	users, err := p.findUsers(id)
 	if err != nil {

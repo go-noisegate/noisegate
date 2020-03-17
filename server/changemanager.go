@@ -9,7 +9,8 @@ type ChangeManager struct {
 
 type change struct {
 	filename string
-	offset   int
+	// both inclusive
+	begin, end int
 }
 
 func NewChangeManager() ChangeManager {

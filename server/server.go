@@ -86,10 +86,10 @@ func (s HornetServer) handleHint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("hint %s:#%d\n", input.Path, input.Offset)
+	log.Printf("hint %s:#%d-%d\n", input.Path, input.Begin, input.End)
 
 	if !fi.IsDir() {
-		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Offset})
+		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Begin, input.End})
 	}
 	w.Write([]byte("accepted\n"))
 }
@@ -118,10 +118,10 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	pathDir := input.Path
 	if !fi.IsDir() {
 		pathDir = filepath.Dir(input.Path)
-		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Offset})
+		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Begin, input.End})
 	}
 
-	log.Printf("test %s:#%d\n", input.Path, input.Offset)
+	log.Printf("test %s:#%d-%d\n", input.Path, input.Begin, input.End)
 
 	if err := s.packageManager.Watch(pathDir); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -150,7 +150,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		respWriter.Write([]byte("Found important tests. Run them first:\n"))
 	}
 
-	log.Debugf("start the job id %d\n", job.ID)
+	log.Debugf("start job %d\n", job.ID)
 	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers, respWriter); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("set up failed: %v\n", err)

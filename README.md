@@ -14,7 +14,7 @@ The core features are:
 ## Quickstart
 
 You usually run the hornet via the editor plugin. So check out the quickstart document of the plugin you installed:
-* [emacs](https://github.com/ks888/hornet.el#quickstart)
+* [emacs](https://github.com/ks888/hornet.el#install)
 * [vscode](https://github.com/ks888/vscode-go-hornet#quickstart)
 
 (If your favorite editor is not here, please consider writing the plugin for your editor!)

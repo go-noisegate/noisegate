@@ -17,7 +17,8 @@ const (
 // TestRequest represents the input data to the test API.
 type TestRequest struct {
 	Path      string `json:"path"`
-	Offset    int    `json:"offset"`
+	Begin     int    `json:"begin"`
+	End       int    `json:"end"`
 	Parallel  string `json:"parallel"`
 	BuildTags string `json:"build_tags"`
 }
@@ -31,6 +32,7 @@ const (
 
 // HintRequest represents the input data to the hint API.
 type HintRequest struct {
-	Path   string `json:"path"`
-	Offset int    `json:"offset"`
+	Path  string `json:"path"`
+	Begin int    `json:"begin"`
+	End   int    `json:"end"`
 }

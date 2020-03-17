@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/ks888/hornet/common/log"
@@ -103,7 +105,6 @@ func (p *Package) Cancel() {
 }
 
 var patternNoTestFiles = regexp.MustCompile(`(?m)\s+\[no test files\]$`)
-var patternNoGoFiles = regexp.MustCompile(`(?m)can't load package: package .+: no Go files in `)
 
 func (p *Package) buildContext(ctx context.Context, artifactPath, buildTags string) error {
 	cmd := exec.CommandContext(ctx, "go", "test", "-c", "-o", artifactPath, "-tags", buildTags, ".")
@@ -111,7 +112,7 @@ func (p *Package) buildContext(ctx context.Context, artifactPath, buildTags stri
 
 	buildLog, err := cmd.CombinedOutput()
 	if err != nil {
-		if patternNoGoFiles.Match(buildLog) {
+		if !hasGoFile(p.path) {
 			return errNoGoTestFiles
 		}
 		return fmt.Errorf("failed to build: %w\nbuild log:\n%s", err, string(buildLog))
@@ -121,4 +122,18 @@ func (p *Package) buildContext(ctx context.Context, artifactPath, buildTags stri
 		return errNoGoTestFiles
 	}
 	return nil
+}
+
+func hasGoFile(dirPath string) bool {
+	fs, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		return false
+	}
+
+	for _, f := range fs {
+		if strings.HasSuffix(f.Name(), ".go") {
+			return true
+		}
+	}
+	return false
 }

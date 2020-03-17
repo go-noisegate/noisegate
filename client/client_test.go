@@ -74,16 +74,35 @@ func TestTestAction_RelativePath(t *testing.T) {
 	}
 }
 
-func TestTestAction_PathAndOffset(t *testing.T) {
+func TestTestAction_Offsets(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc(common.TestPath, func(w http.ResponseWriter, r *http.Request) {})
+	var req common.TestRequest
+	mux.HandleFunc(common.TestPath, func(w http.ResponseWriter, r *http.Request) {
+		data, _ := ioutil.ReadAll(r.Body)
+		_ = json.Unmarshal(data, &req)
+	})
 	server := httptest.NewServer(mux)
 
-	query := "/path/to/test/file:#1"
-	options := client.TestOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://"), TestLogger: &strings.Builder{}}
-	err := client.TestAction(context.Background(), query, options)
-	if err != nil {
-		t.Error(err)
+	for _, testdata := range []struct {
+		offset     string
+		begin, end int
+	}{
+		{"#1", 1, 1},
+		{"#1-2", 1, 2},
+	} {
+		query := "/path/to/test/file:" + testdata.offset
+		options := client.TestOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://"), TestLogger: &strings.Builder{}}
+		err := client.TestAction(context.Background(), query, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if req.Begin != testdata.begin {
+			t.Errorf("unexpected begin: %d", req.Begin)
+		}
+		if req.End != testdata.end {
+			t.Errorf("unexpected end: %d", req.End)
+		}
 	}
 }
 
