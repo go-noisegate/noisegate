@@ -23,7 +23,7 @@ func TestHandleHint(t *testing.T) {
 		t.Fatalf("failed to get wd: %v", err)
 	}
 	path := filepath.Join(curr, "testdata", "sum.go")
-	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
+	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(fmt.Sprintf(`{"path": "%s", "ranges": [{"begin": 0, "end": 0}]}`, path)))
 	w := httptest.NewRecorder()
 	server.handleHint(w, req)
 	if w.Code != http.StatusOK {

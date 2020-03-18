@@ -9,7 +9,7 @@ type ChangeManager struct {
 
 type change struct {
 	filename string
-	// both inclusive
+	// [begin, end], inclusive
 	begin, end int
 }
 

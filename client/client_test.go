@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -84,38 +85,35 @@ func TestTestAction_Offsets(t *testing.T) {
 	server := httptest.NewServer(mux)
 
 	for _, testdata := range []struct {
-		offset     string
-		begin, end int
+		offset string
+		expect []common.Range
+		err    bool
 	}{
-		{"#1", 1, 1},
-		{"#1-2", 1, 2},
+		{"#1", []common.Range{{1, 1}}, false},
+		{"#1-2", []common.Range{{1, 2}}, false},
+		{"#1-2,#3-4", []common.Range{{1, 2}, {3, 4}}, false},
+		{"#1,#2", []common.Range{{1, 1}, {2, 2}}, false},
+		{"#1,2", []common.Range{{1, 1}, {2, 2}}, false},
+		{"#1:#2", nil, true},
+		{"#1-", nil, true},
 	} {
 		query := "/path/to/test/file:" + testdata.offset
 		options := client.TestOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://"), TestLogger: &strings.Builder{}}
 		err := client.TestAction(context.Background(), query, options)
 		if err != nil {
-			t.Fatal(err)
+			if !testdata.err {
+				t.Fatal(err)
+			}
+			continue
+		} else {
+			if testdata.err {
+				t.Fatal("not error")
+			}
 		}
 
-		if req.Begin != testdata.begin {
-			t.Errorf("unexpected begin: %d", req.Begin)
+		if !reflect.DeepEqual(testdata.expect, req.Ranges) {
+			t.Errorf("unexpected ranges: %#v", req.Ranges)
 		}
-		if req.End != testdata.end {
-			t.Errorf("unexpected end: %d", req.End)
-		}
-	}
-}
-
-func TestTestAction_InvalidPathAndOffset(t *testing.T) {
-	mux := http.NewServeMux()
-	mux.HandleFunc(common.TestPath, func(w http.ResponseWriter, r *http.Request) {})
-	server := httptest.NewServer(mux)
-
-	query := "/path/to/test/file:#1:#2"
-	options := client.TestOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://"), TestLogger: &strings.Builder{}}
-	err := client.TestAction(context.Background(), query, options)
-	if err == nil {
-		t.Error(err)
 	}
 }
 

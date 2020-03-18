@@ -28,7 +28,7 @@ type TestOptions struct {
 // TestAction runs the test of the packages related to the specified file.
 // If the path is relative, it assumes it's the relative path from the current working directory.
 func TestAction(ctx context.Context, query string, options TestOptions) error {
-	path, begin, end, err := parseQuery(query)
+	path, ranges, err := parseQuery(query)
 	if err != nil {
 		return err
 	}
@@ -41,7 +41,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.TestRequest{Path: path, Begin: begin, End: end, Parallel: options.Parallel, BuildTags: options.BuildTags}
+	reqData := common.TestRequest{Path: path, Ranges: ranges, Parallel: options.Parallel, BuildTags: options.BuildTags}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err
@@ -66,41 +66,6 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 	return nil
 }
 
-func parseQuery(pathAndRange string) (string, int, int, error) {
-	chunks := strings.Split(pathAndRange, ":")
-	if len(chunks) > 2 {
-		return "", 0, 0, errors.New("too many `:`")
-	} else if len(chunks) == 1 {
-		return pathAndRange, 0, 0, nil
-	}
-
-	path := chunks[0]
-	rawRange := chunks[1]
-	if strings.HasPrefix(rawRange, "#") {
-		rawRange = rawRange[1:]
-	}
-
-	index := strings.Index(rawRange, "-")
-	if index == -1 {
-		offset, err := strconv.Atoi(rawRange)
-		if err != nil {
-			return "", 0, 0, fmt.Errorf("failed to parse the query: %w", err)
-		}
-		return path, offset, offset, nil
-	}
-
-	begin, err := strconv.Atoi(rawRange[0:index])
-	if err != nil {
-		return "", 0, 0, fmt.Errorf("failed to parse the query: %w", err)
-	}
-
-	end, err := strconv.Atoi(rawRange[index+1:])
-	if err != nil {
-		return "", 0, 0, fmt.Errorf("failed to parse the query: %w", err)
-	}
-	return path, begin, end, nil
-}
-
 // HintOptions represents the options which the hint action accepts.
 type HintOptions struct {
 	ServerAddr string
@@ -109,7 +74,7 @@ type HintOptions struct {
 // HintAction hints the recent change of the specified file.
 // If the path is relative, it assumes it's the relative path from the current working directory.
 func HintAction(ctx context.Context, query string, options HintOptions) error {
-	path, begin, end, err := parseQuery(query)
+	path, ranges, err := parseQuery(query)
 	if err != nil {
 		return err
 	}
@@ -122,7 +87,7 @@ func HintAction(ctx context.Context, query string, options HintOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.HintRequest{Path: path, Begin: begin, End: end}
+	reqData := common.HintRequest{Path: path, Ranges: ranges}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err
@@ -143,4 +108,48 @@ func HintAction(ctx context.Context, query string, options HintOptions) error {
 	}
 
 	return nil
+}
+
+func parseQuery(pathAndRange string) (string, []common.Range, error) {
+	chunks := strings.Split(pathAndRange, ":")
+	if len(chunks) > 2 {
+		return "", nil, errors.New("too many `:`")
+	} else if len(chunks) == 1 {
+		return pathAndRange, nil, nil
+	}
+
+	path := chunks[0]
+	ranges, err := parseRanges(chunks[1])
+	return path, ranges, err
+}
+
+func parseRanges(rawRanges string) (rs []common.Range, err error) {
+	ranges := strings.Split(rawRanges, ",")
+	for _, r := range ranges {
+		if strings.HasPrefix(r, "#") {
+			r = r[1:]
+		}
+
+		index := strings.Index(r, "-")
+		if index == -1 {
+			offset, err := strconv.Atoi(r)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse the query: %w", err)
+			}
+			rs = append(rs, common.Range{offset, offset})
+			continue
+		}
+
+		begin, err := strconv.Atoi(r[0:index])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse the query: %w", err)
+		}
+
+		end, err := strconv.Atoi(r[index+1:])
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse the query: %w", err)
+		}
+		rs = append(rs, common.Range{begin, end})
+	}
+	return rs, nil
 }

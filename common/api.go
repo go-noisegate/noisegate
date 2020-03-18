@@ -1,5 +1,10 @@
 package common
 
+import (
+	"fmt"
+	"strings"
+)
+
 // These are just the internal APIs and no need to be the RESTful so far.
 
 //////////////////////////
@@ -16,11 +21,25 @@ const (
 
 // TestRequest represents the input data to the test API.
 type TestRequest struct {
-	Path      string `json:"path"`
-	Begin     int    `json:"begin"`
-	End       int    `json:"end"`
-	Parallel  string `json:"parallel"`
-	BuildTags string `json:"build_tags"`
+	Path      string  `json:"path"`
+	Ranges    []Range `json:"ranges"`
+	Parallel  string  `json:"parallel"`
+	BuildTags string  `json:"build_tags"`
+}
+
+// Range represents the some range of the file.
+type Range struct {
+	Begin int `json:"begin"`
+	End   int `json:"end"`
+}
+
+// RangesToQuery converts the specified ranges to the query.
+func RangesToQuery(ranges []Range) string {
+	var rs []string
+	for _, r := range ranges {
+		rs = append(rs, fmt.Sprintf("#%d-%d", r.Begin, r.End))
+	}
+	return strings.Join(rs, ",")
 }
 
 // valid parallel values
@@ -32,7 +51,6 @@ const (
 
 // HintRequest represents the input data to the hint API.
 type HintRequest struct {
-	Path  string `json:"path"`
-	Begin int    `json:"begin"`
-	End   int    `json:"end"`
+	Path   string  `json:"path"`
+	Ranges []Range `json:"ranges"`
 }

@@ -18,7 +18,7 @@ func main() {
 				Name:      "test",
 				Aliases:   []string{"t"},
 				Usage:     "Run a test",
-				ArgsUsage: "[file_path:#offset (e.g. sum.go:#1) or file_path:#begin-end (e.g. sum.go:#2-10)]",
+				ArgsUsage: "[changed_file_path:#offset1,#offset2,... (e.g. sum.go:#0,#1-2,#4)]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
 						return errors.New("the file path is not specified")
@@ -47,7 +47,7 @@ func main() {
 			{
 				Name:      "hint",
 				Usage:     "Hint the recent change of the specified file",
-				ArgsUsage: "[file_path:#offset (e.g. sum.go:#1) or file_path:#begin-end (e.g. sum.go:#2-10)]",
+				ArgsUsage: "[changed_file_path:#offset1,#offset2,... (e.g. sum.go:#0,#1-2,#4)]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
 						return errors.New("the target file or directory path is not specified")

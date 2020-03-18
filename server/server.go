@@ -86,10 +86,18 @@ func (s HornetServer) handleHint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("hint %s:#%d-%d\n", input.Path, input.Begin, input.End)
+	var ranges string
+	if log.DebugLogEnabled() {
+		ranges = common.RangesToQuery(input.Ranges)
+		log.Debugf("hint %s:%s\n", input.Path, ranges)
+	} else {
+		log.Printf("hint %s\n", input.Path)
+	}
 
 	if !fi.IsDir() {
-		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Begin, input.End})
+		for _, r := range input.Ranges {
+			s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, r.Begin, r.End})
+		}
 	}
 	w.Write([]byte("accepted\n"))
 }
@@ -118,10 +126,18 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	pathDir := input.Path
 	if !fi.IsDir() {
 		pathDir = filepath.Dir(input.Path)
-		s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, input.Begin, input.End})
+		for _, r := range input.Ranges {
+			s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, r.Begin, r.End})
+		}
 	}
 
-	log.Printf("test %s:#%d-%d\n", input.Path, input.Begin, input.End)
+	var ranges string
+	if log.DebugLogEnabled() {
+		ranges = common.RangesToQuery(input.Ranges)
+		log.Debugf("test %s:#%s\n", input.Path, ranges)
+	} else {
+		log.Printf("test %s\n", input.Path)
+	}
 
 	if err := s.packageManager.Watch(pathDir); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
