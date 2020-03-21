@@ -52,6 +52,12 @@ func (m *JobManager) StartJob(ctx context.Context, job *Job, numWorkers int, tes
 			log.Debugf("task set %d: [%v]\n", taskSet.ID, ts)
 		}
 	}
+
+	testResultWriter.Write([]byte(fmt.Sprintf("Changed: [%s]\n\n", strings.Join(job.ChangedIdentityNames(), ", "))))
+	testResultWriter.Write([]byte("Run affected tests:\n"))
+	if !job.HasAffectedTests() {
+		testResultWriter.Write([]byte("\nRun other tests:\n"))
+	}
 	job.Start(ctx)
 
 	m.mtx.Lock()
@@ -182,6 +188,7 @@ func (h *eventHandler) handleResultWithBuffer(result TestResult) {
 	task, ok := h.tasks[result.TestName]
 	if !ok {
 		if result.TestName == "" && !h.job.EnableParallel {
+			// save the elapsed time for the entire job.
 			h.job.ElapsedTestTime = result.ElapsedTime
 		}
 		return

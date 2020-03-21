@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"go/ast"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -160,6 +161,14 @@ func TestJob_Wait(t *testing.T) {
 		t.Errorf("test binary still exist: %v", err)
 	}
 	<-job.jobFinishedCh
+}
+
+func TestJob_ChangedIdentityNames(t *testing.T) {
+	j := &Job{influences: []influence{{from: defaultIdentity{ast.NewIdent("FuncA")}}, {from: defaultIdentity{ast.NewIdent("FuncB")}}}}
+	names := j.ChangedIdentityNames()
+	if !reflect.DeepEqual([]string{"FuncA", "FuncB"}, names) {
+		t.Errorf("wrong list: %#v", names)
+	}
 }
 
 func TestTaskSet_Start(t *testing.T) {

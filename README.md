@@ -3,7 +3,7 @@
 Hornet is the Golang test runner for the speedster.
 
 The core features are:
-* **Change-driven**: by the editor integration, hornet knows what changes you made and runs the tests affected by these changes first.
+* **Change-driven**: by the integration with your editor, hornet knows what changes you made. It runs the tests affected by these changes first.
 * **Tuned for high-speed**: hornet implements some strategies to run the tests faster, including tests in parallel. You may disable these features for safety.
 
 ## Prerequisites
@@ -14,8 +14,8 @@ The core features are:
 ## Quickstart
 
 You usually run the hornet via the editor plugin. So check out the quickstart document of the plugin you installed:
-* [emacs](https://github.com/ks888/hornet.el#install)
-* [vscode](https://github.com/ks888/vscode-go-hornet#quickstart)
+* [emacs](https://github.com/ks888/hornet.el)
+* [vscode](https://github.com/ks888/vscode-go-hornet)
 
 (If your favorite editor is not here, please consider writing the plugin for your editor!)
 
@@ -56,20 +56,24 @@ Let's assume you just implemented some [functions](https://github.com/ks888/horn
    ```sh
    $ cd $GOPATH/src/github.com/ks888/hornet-tutorial
    $ hornet test .   # absolute path is also ok
-   No important tests. Run all the tests:
+   Changed: []
+
+   Run affected tests:
+
+   Run other tests:
    === RUN   TestSlowAdd
    --- PASS: TestSlowAdd (1.01s)
    === RUN   TestSlowAdd_Overflow
    --- PASS: TestSlowAdd_Overflow (1.01s)
    === RUN   TestSlowSub
-   --- FAIL: TestSlowSub (1.00s)
+   --- FAIL: TestSlowSub (1.01s)
        math_test.go:22: wrong result: 2
-   FAIL (1.033450365s)
+   FAIL (1.03338981s)
    ```
 
-   Obviously there is one failed test.
-
-   Also, the total test time is `1.033450365s` because the tests run in parallel. When you run the same tests using `go test`, it takes about 3 seconds.
+   * `Changed` and `Run affected tests` are empty since we don't make any changes yet.
+   * One failed test. We will fix this next.
+   * The test time is `1.033450365s` because the tests run in parallel. When you run the same tests using `go test`, it takes about 3 seconds.
 
 2. Fix the bug
 
@@ -83,7 +87,7 @@ Let's assume you just implemented some [functions](https://github.com/ks888/horn
    $ hornet hint math.go:#176
    ```
 
-   `176` is the byte offset and it points to the `-` character at the line you changed. Usually your editor plugin calculates this offset.
+   `176` is the byte offset and points to the `-` character at the line 12. Usually your editor plugin calculates this offset.
 
 4. Run the tests again
 
@@ -91,19 +95,21 @@ Let's assume you just implemented some [functions](https://github.com/ks888/horn
 
    ```sh
    $ hornet test .
-   Found important tests. Run them first:
+   Changed: [SlowSub]
+
+   Run affected tests:
    === RUN   TestSlowSub
-   --- PASS: TestSlowSub (1.00s)
+   --- PASS: TestSlowSub (1.01s)
 
    Run other tests:
-   === RUN   TestSlowAdd
-   --- PASS: TestSlowAdd (1.00s)
    === RUN   TestSlowAdd_Overflow
    --- PASS: TestSlowAdd_Overflow (1.00s)
-   PASS (1.033799777s)
+   === RUN   TestSlowAdd
+   --- PASS: TestSlowAdd (1.01s)
+   PASS (1.034054983s)
    ```
 
-   *Based on the hint, hornet runs `TestSlowSub` first because it's affected by the previous change.*
+   *The tool knows you've changed the `SlowSub` function and runs affected tests (`TestSlowSub`) first.*
 
 ## How-to guides
 

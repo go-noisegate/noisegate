@@ -287,6 +287,24 @@ func (j *Job) clean() {
 	}
 }
 
+// ChangedIdentityNames returns the list of the changed identities.
+func (j *Job) ChangedIdentityNames() (result []string) {
+	for _, inf := range j.influences {
+		result = append(result, inf.from.Name())
+	}
+	return result
+}
+
+// HasAffectedTests returns true when the job has at least 1 affected test.
+func (j *Job) HasAffectedTests() bool {
+	for _, inf := range j.influences {
+		if len(inf.to) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // TaskSet represents the set of tasks handled by one worker.
 type TaskSet struct {
 	// this id must be the valid index of the Job.TaskSets.

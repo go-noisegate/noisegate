@@ -134,7 +134,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	var ranges string
 	if log.DebugLogEnabled() {
 		ranges = common.RangesToQuery(input.Ranges)
-		log.Debugf("test %s:#%s\n", input.Path, ranges)
+		log.Debugf("test %s:%s\n", input.Path, ranges)
 	} else {
 		log.Printf("test %s\n", input.Path)
 	}
@@ -156,16 +156,6 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respWriter := newFlushWriter(w)
-	numInfluenced := 0
-	for _, inf := range job.influences {
-		numInfluenced += len(inf.to)
-	}
-	if numInfluenced == 0 {
-		respWriter.Write([]byte("No important tests. Run all the tests:\n"))
-	} else {
-		respWriter.Write([]byte("Found important tests. Run them first:\n"))
-	}
-
 	log.Debugf("start job %d\n", job.ID)
 	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers, respWriter); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
