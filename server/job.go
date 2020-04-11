@@ -3,15 +3,11 @@ package server
 import (
 	"context"
 	"errors"
-	"fmt"
 	"go/build"
+	"io"
 	"io/ioutil"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,18 +22,15 @@ type Job struct {
 	ID                               int64
 	DirPath                          string
 	Status                           JobStatus
-	Package                          *Package
 	BuildTags                        string
-	TestBinaryPath                   string
 	CreatedAt, StartedAt, FinishedAt time.Time
 	// build time is not included
 	ElapsedTestTime time.Duration
 	TaskSets        []*TaskSet
 	Tasks           []*Task
-	EnableParallel  bool
 	influences      []influence
-	testEventCh     chan TestEvent
 	jobFinishedCh   chan struct{}
+	writer          io.Writer
 }
 
 // JobStatus represents the status of the job.
@@ -51,21 +44,18 @@ const (
 
 // NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
 // where the package is changed. If `changedFilename` is not empty, important test functions are executed first.
-func NewJob(pkg *Package, changes []change, enableParallel bool, tags string) (*Job, error) {
+func NewJob(dirPath string, changes []change, tags string, w io.Writer) (*Job, error) {
 	job := &Job{
-		ID:             generateID(),
-		DirPath:        pkg.path,
-		Package:        pkg,
-		Status:         JobStatusCreated,
-		BuildTags:      tags,
-		CreatedAt:      time.Now(),
-		EnableParallel: enableParallel,
-		testEventCh:    make(chan TestEvent), // must be unbuffered to avoid the lost result.
-		jobFinishedCh:  make(chan struct{}),
+		ID:            generateID(),
+		DirPath:       dirPath,
+		Status:        JobStatusCreated,
+		BuildTags:     tags,
+		CreatedAt:     time.Now(),
+		jobFinishedCh: make(chan struct{}),
+		writer:        w,
 	}
 
 	errCh := make(chan error)
-	binaryPathCh := make(chan string, 1) // to avoid go routine leaks
 	funcNamesCh := make(chan []string, 1)
 	influencesCh := make(chan []influence, 1)
 
@@ -73,33 +63,7 @@ func NewJob(pkg *Package, changes []change, enableParallel bool, tags string) (*
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		start := time.Now()
-		defer func() {
-			log.Debugf("build time: %v\n", time.Since(start))
-		}()
-
-		var testBinaryPath string
-		var err error
-		if job.EnableParallel {
-			testBinaryPath = filepath.Join(sharedDir, "bin", strconv.FormatInt(job.ID, 10))
-			err = pkg.Build(testBinaryPath, tags)
-			if err != nil {
-				if err == errNoGoTestFiles {
-					err = nil
-				}
-				testBinaryPath = ""
-			}
-		} else {
-			pkg.Cancel() // to stop the unnecessary build
-		}
-		errCh <- err
-		binaryPathCh <- testBinaryPath
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		testFuncNames, err := retrieveTestFuncNames(pkg.path)
+		testFuncNames, err := retrieveTestFuncNames(dirPath)
 		errCh <- err
 		funcNamesCh <- testFuncNames
 	}()
@@ -152,37 +116,14 @@ func NewJob(pkg *Package, changes []change, enableParallel bool, tags string) (*
 
 	for _, testFuncName := range <-funcNamesCh {
 		_, ok := influenced[testFuncName]
-		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Status: TaskStatusCreated, Important: ok, Job: job})
+		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Important: ok, Job: job})
 	}
-	job.TestBinaryPath = <-binaryPathCh
 
 	if err != nil {
-		job.clean()
 		return nil, err
 	}
 
 	return job, nil
-}
-
-func findRepoRoot(path string) string {
-	fi, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		log.Printf("%s not found", path)
-		return path
-	}
-	dirPath := path
-	if !fi.IsDir() {
-		dirPath = filepath.Dir(path)
-	}
-
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	cmd.Dir = dirPath
-	out, err := cmd.Output()
-	if err != nil {
-		log.Printf("failed to find the repository root: %v", err)
-		return dirPath
-	}
-	return strings.TrimSpace(string(out))
 }
 
 var errNoGoTestFiles = errors.New("no go test files")
@@ -268,23 +209,8 @@ func (j *Job) Wait() {
 		j.Status = JobStatusFailed
 	}
 	j.FinishedAt = time.Now()
-	if j.EnableParallel {
-		j.ElapsedTestTime = j.FinishedAt.Sub(j.StartedAt)
-	} else {
-		// on sequential exec, the test results handler updates `ElapsedTestTime`.
-	}
-
-	j.clean()
 
 	close(j.jobFinishedCh)
-}
-
-func (j *Job) clean() {
-	if j.TestBinaryPath != "" {
-		if err := os.Remove(j.TestBinaryPath); err != nil {
-			log.Debugf("failed to remove the test binary %s: %v\n", j.TestBinaryPath, err)
-		}
-	}
 }
 
 // ChangedIdentityNames returns the list of the changed identities.
@@ -311,7 +237,6 @@ type TaskSet struct {
 	ID                    int
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
-	LogPath               string
 	Tasks                 []*Task
 	Job                   *Job
 	Worker                *Worker
@@ -330,10 +255,9 @@ const (
 // NewTaskSet returns the new task set.
 func NewTaskSet(id int, job *Job) *TaskSet {
 	return &TaskSet{
-		ID:      id,
-		Status:  TaskSetStatusCreated,
-		LogPath: filepath.Join(sharedDir, "log", "job", fmt.Sprintf("%d_%d", job.ID, id)),
-		Job:     job,
+		ID:     id,
+		Status: TaskSetStatusCreated,
+		Job:    job,
 	}
 }
 
@@ -361,102 +285,6 @@ func (s *TaskSet) Wait() {
 // Task represents one test function.
 type Task struct {
 	TestFunction string
-	Status       TaskStatus
 	Important    bool
-	ElapsedTime  time.Duration
 	Job          *Job
-}
-
-// TaskStatus
-type TaskStatus int
-
-const (
-	TaskStatusCreated TaskStatus = iota
-	TaskStatusStarted
-	TaskStatusSuccessful
-	TaskStatusFailed
-)
-
-func (t *Task) Finish(successful bool, elapsedTime time.Duration) {
-	if successful {
-		t.Status = TaskStatusSuccessful
-	} else {
-		t.Status = TaskStatusFailed
-	}
-	t.ElapsedTime = elapsedTime
-}
-
-// TestResult represents the test result of one test function.
-type TestResult struct {
-	TestName    string
-	Successful  bool
-	ElapsedTime time.Duration
-	Output      []string
-}
-
-// LPTPartitioner is the partitioner based on the longest processing time algorithm.
-type LPTPartitioner struct {
-	profiler *TaskProfiler
-}
-
-// NewLPTPartitioner return the new LPTPartitioner.
-func NewLPTPartitioner(profiler *TaskProfiler) LPTPartitioner {
-	return LPTPartitioner{profiler: profiler}
-}
-
-type taskWithExecTime struct {
-	task     *Task
-	execTime time.Duration
-}
-
-// Partition divides the tasks into the list of the task sets.
-func (p LPTPartitioner) Partition(tasks []*Task, job *Job, numPartitions int) []*TaskSet {
-	sortedTasks, noProfileTasks := p.sortByExecTime(tasks, job)
-
-	// O(numPartitions * numTasks). Can be O(numTasks * log(numPartitions)) using pq at the cost of complexity.
-	taskSets := make([]*TaskSet, numPartitions)
-	for i := 0; i < numPartitions; i++ {
-		taskSets[i] = NewTaskSet(len(job.TaskSets)+i, job)
-	}
-	totalExecTimes := make([]time.Duration, numPartitions)
-	for _, t := range sortedTasks {
-		minIndex := 0
-		for i, totalExecTime := range totalExecTimes {
-			if totalExecTime < totalExecTimes[minIndex] {
-				minIndex = i
-			}
-		}
-
-		taskSets[minIndex].Tasks = append(taskSets[minIndex].Tasks, t.task)
-		totalExecTimes[minIndex] += t.execTime
-	}
-
-	p.distributeTasks(taskSets, noProfileTasks)
-	return taskSets
-}
-
-func (p LPTPartitioner) sortByExecTime(tasks []*Task, job *Job) (sorted []taskWithExecTime, noProfile []*Task) {
-	for i := range tasks {
-		execTime := p.profiler.ExpectExecTime(job.DirPath, tasks[i].TestFunction)
-		if execTime == 0 {
-			noProfile = append(noProfile, tasks[i])
-			continue
-		}
-		sorted = append(sorted, taskWithExecTime{task: tasks[i], execTime: execTime})
-	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].execTime > sorted[j].execTime
-	})
-	return
-}
-
-func (p LPTPartitioner) distributeTasks(taskSets []*TaskSet, tasks []*Task) {
-	curr := 0
-	for _, task := range tasks {
-		taskSets[curr].Tasks = append(taskSets[curr].Tasks, task)
-		curr++
-		if curr == len(taskSets) {
-			curr = 0
-		}
-	}
 }

@@ -10,13 +10,12 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ks888/hornet/common"
 )
 
 func TestHandleHint(t *testing.T) {
-	server := NewHornetServer("", 1)
+	server := NewHornetServer("")
 
 	curr, err := os.Getwd()
 	if err != nil {
@@ -41,7 +40,7 @@ func TestHandleHint(t *testing.T) {
 }
 
 func TestHandleHint_InvalidJSON(t *testing.T) {
-	server := NewHornetServer("", 1)
+	server := NewHornetServer("")
 
 	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(`{`))
 	w := httptest.NewRecorder()
@@ -53,7 +52,7 @@ func TestHandleHint_InvalidJSON(t *testing.T) {
 }
 
 func TestHandleHint_RelativePath(t *testing.T) {
-	server := NewHornetServer("", 1)
+	server := NewHornetServer("")
 
 	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(`{"path": "rel/path"}`))
 	w := httptest.NewRecorder()
@@ -65,7 +64,7 @@ func TestHandleHint_RelativePath(t *testing.T) {
 }
 
 func TestHandleHint_PathNotFound(t *testing.T) {
-	server := NewHornetServer("", 1)
+	server := NewHornetServer("")
 
 	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(`{"path": "/path/to/not/exist/file"}`))
 	w := httptest.NewRecorder()
@@ -77,7 +76,7 @@ func TestHandleHint_PathNotFound(t *testing.T) {
 }
 
 func TestHandleTest_InputIsFile(t *testing.T) {
-	server := NewHornetServer("", 1)
+	server := NewHornetServer("")
 
 	curr, err := os.Getwd()
 	if err != nil {
@@ -99,7 +98,7 @@ func TestHandleTest_InputIsFile(t *testing.T) {
 }
 
 func TestHandleTest_InputIsDir(t *testing.T) {
-	server := NewHornetServer("", 1)
+	server := NewHornetServer("")
 
 	curr, err := os.Getwd()
 	if err != nil {
@@ -121,7 +120,7 @@ func TestHandleTest_InputIsDir(t *testing.T) {
 }
 
 func TestHandleTest_EmptyBody(t *testing.T) {
-	server := NewHornetServer("", 1)
+	server := NewHornetServer("")
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
@@ -133,7 +132,7 @@ func TestHandleTest_EmptyBody(t *testing.T) {
 }
 
 func TestHandleTest_RelativePath(t *testing.T) {
-	server := NewHornetServer("", 1)
+	server := NewHornetServer("")
 
 	req := httptest.NewRequest("GET", "/test", strings.NewReader(`{"path": "rel/path"}`))
 	w := httptest.NewRecorder()
@@ -141,34 +140,5 @@ func TestHandleTest_RelativePath(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("unexpected code: %d", w.Code)
-	}
-}
-
-func TestHornetServer_Parallel(t *testing.T) {
-	server := NewHornetServer("", 1)
-	path := "/path/to/dir"
-	if res := server.parallel(path, common.ParallelOn); !res {
-		t.Errorf("wrong result: %v", res)
-	}
-
-	if res := server.parallel(path, common.ParallelOff); res {
-		t.Errorf("wrong result: %v", res)
-	}
-
-	// no last result
-	if res := server.parallel(path, common.ParallelAuto); !res {
-		t.Errorf("wrong result: %v", res)
-	}
-
-	// slow test
-	server.jobProfiler.Add(path, time.Second)
-	if res := server.parallel(path, common.ParallelAuto); !res {
-		t.Errorf("wrong result: %v", res)
-	}
-
-	// fast test
-	server.jobProfiler.Add(path, time.Millisecond)
-	if res := server.parallel(path, common.ParallelAuto); res {
-		t.Errorf("wrong result: %v", res)
 	}
 }

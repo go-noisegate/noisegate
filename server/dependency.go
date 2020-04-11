@@ -314,6 +314,8 @@ type functionIdentity struct {
 
 func (id functionIdentity) Match(n ast.Node) (*ast.Ident, bool) {
 	if other, ok := n.(*ast.Ident); ok {
+		fmt.Printf("id: %#v, %#v\n", id, id.obj)
+		fmt.Printf("other: %#v, %#v\n", other, other.Obj)
 		if other.Obj == id.obj && other.Pos() != id.obj.Pos() {
 			return other, true
 		}

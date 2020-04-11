@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/ks888/hornet/common"
 	"github.com/ks888/hornet/common/log"
@@ -31,23 +30,17 @@ func SetUpSharedDir(dir string) {
 // HornetServer serves the APIs for the cli client.
 type HornetServer struct {
 	*http.Server
-	jobManager        *JobManager
-	packageManager    *PackageManager
-	jobProfiler       *JobProfiler
-	changeManager     ChangeManager
-	defaultNumWorkers int
-	depthLimit        int
+	jobManager    *JobManager
+	changeManager ChangeManager
+	depthLimit    int
 }
 
 // NewHornetServer returns the new hornet server.
 // We can use only one server instance in the process even if the address is different.
-func NewHornetServer(addr string, defaultNumWorkers int) HornetServer {
+func NewHornetServer(addr string) HornetServer {
 	s := HornetServer{
-		jobManager:        NewJobManager(),
-		packageManager:    NewPackageManager(),
-		defaultNumWorkers: defaultNumWorkers,
-		jobProfiler:       NewJobProfiler(),
-		changeManager:     NewChangeManager(),
+		jobManager:    NewJobManager(),
+		changeManager: NewChangeManager(),
 	}
 
 	mux := http.NewServeMux()
@@ -139,14 +132,8 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		log.Printf("test %s\n", input.Path)
 	}
 
-	if err := s.packageManager.Watch(pathDir); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "failed to watch the package %s: %v\n", pathDir, err)
-		return
-	}
-	pkg, _ := s.packageManager.Find(pathDir)
-
-	job, err := NewJob(pkg, s.changeManager.Pop(pathDir), s.parallel(pkg.path, input.Parallel), input.BuildTags)
+	respWriter := newFlushWriter(w)
+	job, err := NewJob(pathDir, s.changeManager.Pop(pathDir), input.BuildTags, respWriter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -155,9 +142,8 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respWriter := newFlushWriter(w)
 	log.Debugf("start job %d\n", job.ID)
-	if err := s.jobManager.StartJob(context.Background(), job, s.defaultNumWorkers, respWriter); err != nil {
+	if err := s.jobManager.StartJob(context.Background(), job); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("set up failed: %v\n", err)
 		fmt.Fprint(w, msg)
@@ -166,20 +152,6 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.WaitJob(w, job)
-}
-
-func (s HornetServer) parallel(path, clientArg string) bool {
-	switch clientArg {
-	case common.ParallelOn:
-		return true
-	case common.ParallelOff:
-		return false
-	default:
-		if lastElapsedTime, ok := s.jobProfiler.LastElapsedTime(path); ok && lastElapsedTime < time.Second {
-			return false
-		}
-		return true
-	}
 }
 
 func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
@@ -191,8 +163,6 @@ func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
 	if job.Status == JobStatusSuccessful {
 		result = "PASS"
 	}
-
-	s.jobProfiler.Add(job.DirPath, job.ElapsedTestTime)
 
 	fmt.Fprintf(w, "%s (%v)\n", result, job.ElapsedTestTime)
 	log.Debugf("time to execute all the tests: %v\n", job.ElapsedTestTime)
