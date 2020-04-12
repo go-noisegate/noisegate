@@ -44,7 +44,7 @@ const (
 
 // NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
 // where the package is changed. If `changedFilename` is not empty, important test functions are executed first.
-func NewJob(dirPath string, changes []change, tags string, w io.Writer) (*Job, error) {
+func NewJob(dirPath string, changes []change, tags string, bypass bool, w io.Writer) (*Job, error) {
 	job := &Job{
 		ID:            generateID(),
 		DirPath:       dirPath,
@@ -114,10 +114,17 @@ func NewJob(dirPath string, changes []change, tags string, w io.Writer) (*Job, e
 		}
 	}
 
+	ts := NewTaskSet(0, job)
 	for _, testFuncName := range <-funcNamesCh {
 		_, ok := influenced[testFuncName]
-		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Important: ok, Job: job})
+		t := &Task{TestFunction: testFuncName, Important: ok, Job: job}
+		job.Tasks = append(job.Tasks, t)
+
+		if ok || bypass {
+			ts.Tasks = append(ts.Tasks, t)
+		}
 	}
+	job.TaskSets = []*TaskSet{ts}
 
 	return job, err
 }
@@ -174,6 +181,16 @@ func generateID() int64 {
 
 // Start starts all the task sets.
 func (j *Job) Start(ctx context.Context) {
+	if log.DebugLogEnabled() {
+		for _, taskSet := range j.TaskSets {
+			var ts []string
+			for _, t := range taskSet.Tasks {
+				ts = append(ts, t.TestFunction)
+			}
+			log.Debugf("task set %d: [%v]\n", taskSet.ID, ts)
+		}
+	}
+
 	j.StartedAt = time.Now()
 
 	for _, taskSet := range j.TaskSets {
@@ -267,6 +284,7 @@ func (s *TaskSet) Start(ctx context.Context) error {
 }
 
 // Wait waits the worker finished.
+// TODO: support context
 func (s *TaskSet) Wait() {
 	successful, _ := s.Worker.Wait()
 

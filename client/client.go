@@ -21,8 +21,8 @@ import (
 type TestOptions struct {
 	ServerAddr string
 	TestLogger io.Writer
-	Parallel   string
 	BuildTags  string
+	Bypass     bool
 }
 
 // TestAction runs the test of the packages related to the specified file.
@@ -41,7 +41,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.TestRequest{Path: path, Ranges: ranges, Parallel: options.Parallel, BuildTags: options.BuildTags}
+	reqData := common.TestRequest{Path: path, Ranges: ranges, BuildTags: options.BuildTags, Bypass: options.Bypass}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err

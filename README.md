@@ -1,8 +1,8 @@
 # Noise Gate
 
-Noise Gate is the Golang test runner with the noise reduction feature.
+Noise Gate is the Golang test runner with the noise reduction.
 
-When you run the tests, the tool eliminates the unimportant tests for the faster test results.
+When you run the tests, the tool eliminates the unimportant tests for the *faster test results*.
 
 [image]()
 

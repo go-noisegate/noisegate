@@ -28,7 +28,7 @@ func TestNewJob(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", nil)
+	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", false, nil)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestNewJob(t *testing.T) {
 
 func TestNewJob_InvalidDirPath(t *testing.T) {
 	dirPath := "/not/exist/dir"
-	_, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", nil)
+	_, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", false, nil)
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
@@ -72,12 +72,11 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
-				job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "README.md"), 0, 0}}, "", nil)
+				job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "README.md"), 0, 0}}, "", false, nil)
 				if err != nil {
 					panic(err)
 				}
 				ch <- job.ID
-				job.Wait()
 			}
 		}()
 	}
@@ -99,7 +98,7 @@ func TestNewJob_WithBuildTags(t *testing.T) {
 	}
 	dirPath := filepath.Join(currDir, "testdata", "buildtags")
 
-	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 63, 63}}, "example", nil)
+	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 63, 63}}, "example", false, nil)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -124,7 +123,7 @@ func TestJob_StartAndWait(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
-	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", nil)
+	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", false, nil)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}

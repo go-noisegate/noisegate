@@ -27,7 +27,7 @@ func main() {
 					log.EnableDebugLog(c.Bool("debug"))
 
 					query := c.Args().First()
-					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, BuildTags: c.String("tags")}
+					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, BuildTags: c.String("tags"), Bypass: c.Bool("bypass")}
 					return client.TestAction(c.Context, query, options)
 				},
 				Flags: []cli.Flag{
@@ -35,6 +35,10 @@ func main() {
 						Name:  "tags",
 						Usage: "a comma-separated list of build tags.",
 						Value: "",
+					},
+					&cli.BoolFlag{
+						Name:  "bypass",
+						Usage: "do not exclude any tests.",
 					},
 				},
 			},

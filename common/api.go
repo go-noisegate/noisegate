@@ -23,8 +23,8 @@ const (
 type TestRequest struct {
 	Path      string  `json:"path"`
 	Ranges    []Range `json:"ranges"`
-	Parallel  string  `json:"parallel"`
 	BuildTags string  `json:"build_tags"`
+	Bypass    bool    `json:"bypass"`
 }
 
 // Range represents the some range of the file.
@@ -41,13 +41,6 @@ func RangesToQuery(ranges []Range) string {
 	}
 	return strings.Join(rs, ",")
 }
-
-// valid parallel values
-const (
-	ParallelOn   = "on"
-	ParallelOff  = "off"
-	ParallelAuto = "auto"
-)
 
 // HintRequest represents the input data to the hint API.
 type HintRequest struct {

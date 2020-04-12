@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ks888/noisegate/common"
 	"github.com/ks888/noisegate/common/log"
@@ -30,7 +31,6 @@ func SetUpSharedDir(dir string) {
 // Server serves the APIs for the cli client.
 type Server struct {
 	*http.Server
-	jobManager    *JobManager
 	changeManager ChangeManager
 	depthLimit    int
 }
@@ -39,7 +39,6 @@ type Server struct {
 // We can use only one server instance in the process even if the address is different.
 func NewServer(addr string) Server {
 	s := Server{
-		jobManager:    NewJobManager(),
 		changeManager: NewChangeManager(),
 	}
 
@@ -133,7 +132,7 @@ func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respWriter := newFlushWriter(w)
-	job, err := NewJob(pathDir, s.changeManager.Pop(pathDir), input.BuildTags, respWriter)
+	job, err := NewJob(pathDir, s.changeManager.Pop(pathDir), input.BuildTags, input.Bypass, respWriter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -143,28 +142,23 @@ func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debugf("start job %d\n", job.ID)
-	if err := s.jobManager.StartJob(context.Background(), job); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		msg := fmt.Sprintf("set up failed: %v\n", err)
-		fmt.Fprint(w, msg)
-		log.Debug(msg)
-		return
-	}
+	respWriter.Write([]byte(fmt.Sprintf("Changed: [%s]\n", strings.Join(job.ChangedIdentityNames(), ", "))))
 
-	s.WaitJob(w, job)
+	ctx := context.Background()
+	job.Start(ctx)
+
+	s.WaitJob(job)
 }
 
-func (s Server) WaitJob(w http.ResponseWriter, job *Job) {
-	if err := s.jobManager.WaitJob(job.ID); err != nil {
-		fmt.Fprintf(w, "set up failed: %v", err)
-	}
+func (s Server) WaitJob(job *Job) {
+	job.Wait()
 
 	result := "FAIL"
 	if job.Status == JobStatusSuccessful {
 		result = "PASS"
 	}
 
-	fmt.Fprintf(w, "%s (%v)\n", result, job.ElapsedTestTime)
+	fmt.Fprintf(job.writer, "%s (%v)\n", result, job.ElapsedTestTime)
 	log.Debugf("time to execute all the tests: %v\n", job.ElapsedTestTime)
 	log.Debugf("total time: %v\n", job.FinishedAt.Sub(job.CreatedAt))
 }
