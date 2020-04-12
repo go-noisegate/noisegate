@@ -1,4 +1,4 @@
-module github.com/ks888/hornet
+module github.com/ks888/noisegate
 
 go 1.13
 

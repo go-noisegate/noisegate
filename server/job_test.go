@@ -9,11 +9,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ks888/hornet/common/log"
+	"github.com/ks888/noisegate/common/log"
 )
 
 func TestMain(m *testing.M) {
-	dir, err := ioutil.TempDir("", "hornet")
+	dir, err := ioutil.TempDir("", "noisegate")
 	if err != nil {
 		log.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -25,10 +25,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestNewJob(t *testing.T) {
-	currDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get wd: %v", err)
-	}
+	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
 	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", nil)
@@ -123,7 +120,7 @@ func TestNewJob_WithBuildTags(t *testing.T) {
 	}
 }
 
-func TestJob_Wait(t *testing.T) {
+func TestJob_StartAndWait(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata")
 
@@ -132,6 +129,7 @@ func TestJob_Wait(t *testing.T) {
 		t.Fatalf("failed to create new job: %v", err)
 	}
 
+	job.Start(context.Background())
 	job.Wait()
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
@@ -147,9 +145,11 @@ func TestJob_ChangedIdentityNames(t *testing.T) {
 	}
 }
 
-func TestTaskSet_Start(t *testing.T) {
+func TestTaskSet(t *testing.T) {
 	set := NewTaskSet(1, &Job{ID: 1})
-	set.Start(context.Background())
+	if err := set.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if set.Status != TaskSetStatusStarted {
 		t.Errorf("wrong status: %v", set.Status)
 	}
@@ -159,16 +159,12 @@ func TestTaskSet_Start(t *testing.T) {
 	if set.Worker == nil {
 		t.Errorf("nil worker")
 	}
-}
 
-func TestTaskSet_Wait(t *testing.T) {
-	set := NewTaskSet(1, &Job{ID: 1})
-	set.Worker = &Worker{}
 	set.Wait()
 	if set.Status != TaskSetStatusSuccessful {
 		t.Errorf("wrong status: %v", set.Status)
 	}
 	if set.FinishedAt.IsZero() {
-		t.Errorf("0 FinishedAt")
+		t.Errorf("FinishedAt is 0")
 	}
 }

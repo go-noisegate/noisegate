@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ks888/hornet/common/log"
+	"github.com/ks888/noisegate/common/log"
 	"golang.org/x/tools/go/ast/astutil"
 )
 

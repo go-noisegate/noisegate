@@ -1,7 +1,0 @@
-#!/bin/sh
-
-echo '=== RUN   TestSum'
-echo '--- PASS: TestSum (0.00s)'
-echo 'PASS'
-echo 'ok      _/Users/yagami/go/src/github.com/ks888/hornet/server/testdata   0.005s'
-

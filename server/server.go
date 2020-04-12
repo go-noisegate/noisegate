@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ks888/hornet/common"
-	"github.com/ks888/hornet/common/log"
+	"github.com/ks888/noisegate/common"
+	"github.com/ks888/noisegate/common/log"
 )
 
 var sharedDir string
@@ -27,18 +27,18 @@ func SetUpSharedDir(dir string) {
 	log.Debugf("shared dir: %s", sharedDir)
 }
 
-// HornetServer serves the APIs for the cli client.
-type HornetServer struct {
+// Server serves the APIs for the cli client.
+type Server struct {
 	*http.Server
 	jobManager    *JobManager
 	changeManager ChangeManager
 	depthLimit    int
 }
 
-// NewHornetServer returns the new hornet server.
+// NewServer returns a new server.
 // We can use only one server instance in the process even if the address is different.
-func NewHornetServer(addr string) HornetServer {
-	s := HornetServer{
+func NewServer(addr string) Server {
+	s := Server{
 		jobManager:    NewJobManager(),
 		changeManager: NewChangeManager(),
 	}
@@ -54,11 +54,11 @@ func NewHornetServer(addr string) HornetServer {
 }
 
 // Shutdown shutdowns the http server.
-func (s HornetServer) Shutdown(ctx context.Context) error {
+func (s Server) Shutdown(ctx context.Context) error {
 	return s.Server.Shutdown(ctx)
 }
 
-func (s HornetServer) handleHint(w http.ResponseWriter, r *http.Request) {
+func (s Server) handleHint(w http.ResponseWriter, r *http.Request) {
 	var input common.HintRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
@@ -95,7 +95,7 @@ func (s HornetServer) handleHint(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("accepted\n"))
 }
 
-func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
+func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 	var input common.TestRequest
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&input); err != nil {
@@ -154,7 +154,7 @@ func (s HornetServer) handleTest(w http.ResponseWriter, r *http.Request) {
 	s.WaitJob(w, job)
 }
 
-func (s HornetServer) WaitJob(w http.ResponseWriter, job *Job) {
+func (s Server) WaitJob(w http.ResponseWriter, job *Job) {
 	if err := s.jobManager.WaitJob(job.ID); err != nil {
 		fmt.Fprintf(w, "set up failed: %v", err)
 	}

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ks888/hornet/client"
-	"github.com/ks888/hornet/common"
+	"github.com/ks888/noisegate/client"
+	"github.com/ks888/noisegate/common"
 )
 
 func TestTestAction(t *testing.T) {

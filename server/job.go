@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ks888/hornet/common/log"
+	"github.com/ks888/noisegate/common/log"
 	"go.uber.org/multierr"
 )
 
@@ -119,11 +119,7 @@ func NewJob(dirPath string, changes []change, tags string, w io.Writer) (*Job, e
 		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName, Important: ok, Job: job})
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
-	return job, nil
+	return job, err
 }
 
 var errNoGoTestFiles = errors.New("no go test files")

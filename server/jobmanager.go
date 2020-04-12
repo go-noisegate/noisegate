@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ks888/hornet/common/log"
+	"github.com/ks888/noisegate/common/log"
 )
 
 // JobManager manages the jobs.

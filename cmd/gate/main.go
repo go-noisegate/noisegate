@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ks888/hornet/client"
-	"github.com/ks888/hornet/common/log"
+	"github.com/ks888/noisegate/client"
+	"github.com/ks888/noisegate/common/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -27,16 +27,10 @@ func main() {
 					log.EnableDebugLog(c.Bool("debug"))
 
 					query := c.Args().First()
-					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, Parallel: c.String("parallel"), BuildTags: c.String("tags")}
+					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, BuildTags: c.String("tags")}
 					return client.TestAction(c.Context, query, options)
 				},
 				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "parallel",
-						Aliases: []string{"p"},
-						Usage:   "enable the parallel testing [on, off or auto]. When `auto`, the tool automatically chooses the faster option.",
-						Value:   "auto",
-					},
 					&cli.StringFlag{
 						Name:  "tags",
 						Usage: "a comma-separated list of build tags.",
@@ -64,7 +58,7 @@ func main() {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "addr",
-				Usage: "hornetd server's `address`",
+				Usage: "gated server's `address`",
 				Value: "localhost:48059",
 			},
 			&cli.BoolFlag{

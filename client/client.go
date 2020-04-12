@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ks888/hornet/common"
+	"github.com/ks888/noisegate/common"
 )
 
 // TestOptions represents the options which the test action accepts.

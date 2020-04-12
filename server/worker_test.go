@@ -10,7 +10,7 @@ import (
 )
 
 func TestWorker_StartAndWait(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet-test")
+	tempDir, err := ioutil.TempDir("", "noisegate-test")
 	if err != nil {
 		t.Errorf("failed to create the temp directory: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestWorker_StartAndWait(t *testing.T) {
 }
 
 func TestWorker_CheckOutput(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet-test")
+	tempDir, err := ioutil.TempDir("", "noisegate-test")
 	if err != nil {
 		t.Errorf("failed to create the temp directory: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestWorker_CheckOutput(t *testing.T) {
 }
 
 func TestWorker_WithBuildTags(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "hornet-test")
+	tempDir, err := ioutil.TempDir("", "noisegate-test")
 	if err != nil {
 		t.Errorf("failed to create the temp directory: %v", err)
 	}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -11,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ks888/hornet/common/log"
-	"github.com/ks888/hornet/server"
+	"github.com/ks888/noisegate/common/log"
+	"github.com/ks888/noisegate/server"
 	"github.com/urfave/cli/v2"
 )
 
@@ -28,25 +27,13 @@ func main() {
 
 			log.EnableDebugLog(c.Bool("debug"))
 
-			numWorkers := c.Int("num-workers")
-			if numWorkers < 1 {
-				return errors.New("the number of workers must be positive")
-			}
-			opt := workerOptions{
-				numWorkers: numWorkers,
-			}
-			return runServer(addr, opt)
+			return runServer(addr)
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "debug",
 				Usage: "print the debug logs",
 				Value: false,
-			},
-			&cli.IntFlag{
-				Name:  "num-workers",
-				Usage: "the number of workers",
-				Value: 4,
 			},
 		},
 		HideHelp: true, // to hide the `COMMANDS` section in the help message.
@@ -58,22 +45,18 @@ func main() {
 	}
 }
 
-type workerOptions struct {
-	numWorkers int
-}
-
-func runServer(addr string, opt workerOptions) error {
-	tmpDir := "/tmp/hornet"
+func runServer(addr string) error {
+	tmpDir := "/tmp/noisegate"
 	_ = os.Mkdir(tmpDir, os.ModePerm) // may exist already
 
-	sharedDir, err := ioutil.TempDir(tmpDir, "hornet")
+	sharedDir, err := ioutil.TempDir(tmpDir, "noisegate")
 	if err != nil {
 		return fmt.Errorf("failed to create the directory to store the test binary: %w", err)
 	}
 	defer os.RemoveAll(sharedDir)
 	server.SetUpSharedDir(sharedDir)
 
-	server := server.NewHornetServer(addr)
+	server := server.NewServer(addr)
 	shutdownDoneCh := make(chan struct{})
 	go func() {
 		sigCh := make(chan os.Signal, 1)
