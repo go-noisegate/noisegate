@@ -9,7 +9,6 @@ import (
 )
 
 type Worker struct {
-	ctx         context.Context
 	testFuncs   []string
 	packagePath string
 	buildTags   string
@@ -18,14 +17,13 @@ type Worker struct {
 }
 
 // NewWorker returns the worker which executes the task set.
-func NewWorker(ctx context.Context, job *Job, taskSet *TaskSet) *Worker {
+func NewWorker(job *Job, taskSet *TaskSet) *Worker {
 	var testFuncs []string
 	for _, t := range taskSet.Tasks {
 		testFuncs = append(testFuncs, t.TestFunction)
 	}
 
 	return &Worker{
-		ctx:         ctx,
 		testFuncs:   testFuncs,
 		packagePath: job.DirPath,
 		buildTags:   job.BuildTags,
@@ -34,12 +32,12 @@ func NewWorker(ctx context.Context, job *Job, taskSet *TaskSet) *Worker {
 }
 
 // Start starts the new test.
-func (w *Worker) Start() error {
+func (w *Worker) Start(ctx context.Context) error {
 	if len(w.testFuncs) == 0 {
 		return nil
 	}
 
-	w.cmd = exec.CommandContext(w.ctx, "go", "test", "-tags", w.buildTags, "-v", "-run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
+	w.cmd = exec.CommandContext(ctx, "go", "test", "-tags", w.buildTags, "-v", "-run", "^"+strings.Join(w.testFuncs, "$|^")+"$")
 	w.cmd.Dir = w.packagePath
 
 	w.cmd.Stdout = w.writer

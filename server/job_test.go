@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 
 func TestNewJob(t *testing.T) {
 	currDir, _ := os.Getwd()
-	dirPath := filepath.Join(currDir, "testdata")
+	dirPath := filepath.Join(currDir, "testdata", "typical")
 
 	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", false, nil)
 	if err != nil {
@@ -121,7 +121,7 @@ func TestNewJob_WithBuildTags(t *testing.T) {
 
 func TestJob_StartAndWait(t *testing.T) {
 	currDir, _ := os.Getwd()
-	dirPath := filepath.Join(currDir, "testdata")
+	dirPath := filepath.Join(currDir, "testdata", "typical")
 
 	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", false, nil)
 	if err != nil {

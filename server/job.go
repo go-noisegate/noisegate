@@ -279,8 +279,8 @@ func (s *TaskSet) Start(ctx context.Context) error {
 	s.StartedAt = time.Now()
 	s.Status = TaskSetStatusStarted
 
-	s.Worker = NewWorker(ctx, s.Job, s)
-	return s.Worker.Start()
+	s.Worker = NewWorker(s.Job, s)
+	return s.Worker.Start(ctx)
 }
 
 // Wait waits the worker finished.

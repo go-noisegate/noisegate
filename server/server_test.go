@@ -21,7 +21,7 @@ func TestHandleHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get wd: %v", err)
 	}
-	path := filepath.Join(curr, "testdata", "sum.go")
+	path := filepath.Join(curr, "testdata", "typical", "sum.go")
 	req := httptest.NewRequest("GET", common.HintPath, strings.NewReader(fmt.Sprintf(`{"path": "%s", "ranges": [{"begin": 0, "end": 0}]}`, path)))
 	w := httptest.NewRecorder()
 	server.handleHint(w, req)
@@ -82,7 +82,7 @@ func TestHandleTest_InputIsFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get wd: %v", err)
 	}
-	path := filepath.Join(curr, "testdata", "sum.go")
+	path := filepath.Join(curr, "testdata", "typical", "sum.go")
 	req := httptest.NewRequest("GET", common.TestPath, strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	server.handleTest(w, req)
@@ -104,7 +104,7 @@ func TestHandleTest_InputIsDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get wd: %v", err)
 	}
-	path := filepath.Join(curr, "testdata")
+	path := filepath.Join(curr, "testdata", "typical")
 	req := httptest.NewRequest("GET", common.TestPath, strings.NewReader(fmt.Sprintf(`{"path": "%s"}`, path)))
 	w := httptest.NewRecorder()
 	server.handleTest(w, req)

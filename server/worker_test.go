@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,12 +9,6 @@ import (
 )
 
 func TestWorker_StartAndWait(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "noisegate-test")
-	if err != nil {
-		t.Errorf("failed to create the temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
-
 	testCases := []struct {
 		// input
 		PackagePath string
@@ -25,9 +18,28 @@ func TestWorker_StartAndWait(t *testing.T) {
 		waitErr  bool
 	}{
 		{
-			Tasks:    []string{"TestSum"},
-			startErr: false,
-			waitErr:  false,
+			PackagePath: filepath.Join("testdata", "typical"),
+			Tasks:       []string{"TestSum"},
+			startErr:    false,
+			waitErr:     false,
+		},
+		{
+			PackagePath: filepath.Join("testdata", "no_go_test_files"),
+			Tasks:       []string{"TestSum"},
+			startErr:    false,
+			waitErr:     false,
+		},
+		{
+			PackagePath: filepath.Join("testdata", "no_go_files"),
+			Tasks:       []string{"TestSum"},
+			startErr:    false,
+			waitErr:     true,
+		},
+		{
+			PackagePath: filepath.Join("testdata", "build_error"),
+			Tasks:       []string{"TestSum"},
+			startErr:    false,
+			waitErr:     true,
 		},
 		{
 			PackagePath: "/path/to/not/exist/file",
@@ -36,19 +48,19 @@ func TestWorker_StartAndWait(t *testing.T) {
 			waitErr:     false,
 		},
 		{
-			Tasks:    []string{},
-			startErr: false,
-			waitErr:  false,
+			PackagePath: "/path/to/not/exist/file",
+			Tasks:       []string{},
+			startErr:    false,
+			waitErr:     false,
 		},
 	}
 
 	for i, testCase := range testCases {
 		w := &Worker{
-			ctx:         context.Background(),
 			packagePath: testCase.PackagePath,
 			testFuncs:   testCase.Tasks,
 		}
-		err := w.Start()
+		err := w.Start(context.Background())
 		if (err != nil) != testCase.startErr {
 			t.Errorf("[%d] %v", i, err)
 		}
@@ -64,23 +76,18 @@ func TestWorker_StartAndWait(t *testing.T) {
 }
 
 func TestWorker_CheckOutput(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "noisegate-test")
-	if err != nil {
-		t.Errorf("failed to create the temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
 	currDir, _ := os.Getwd()
 
 	var buff strings.Builder
 	job := &Job{
-		DirPath: filepath.Join(currDir, "testdata"),
+		DirPath: filepath.Join(currDir, "testdata", "typical"),
 		writer:  &buff,
 	}
 	taskSet := &TaskSet{
 		Tasks: []*Task{{TestFunction: "TestSum"}},
 	}
-	w := NewWorker(context.Background(), job, taskSet)
-	if err := w.Start(); err != nil {
+	w := NewWorker(job, taskSet)
+	if err := w.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -89,17 +96,12 @@ func TestWorker_CheckOutput(t *testing.T) {
 		t.Fatalf("unexpected result: %v, %v", passed, err)
 	}
 
-	if !strings.Contains(buff.String(), "TestSum") {
+	if !strings.Contains(buff.String(), "--- PASS: TestSum") {
 		t.Errorf("unexpected content: %s", buff.String())
 	}
 }
 
 func TestWorker_WithBuildTags(t *testing.T) {
-	tempDir, err := ioutil.TempDir("", "noisegate-test")
-	if err != nil {
-		t.Errorf("failed to create the temp directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
 	currDir, _ := os.Getwd()
 
 	job := &Job{
@@ -109,8 +111,8 @@ func TestWorker_WithBuildTags(t *testing.T) {
 	taskSet := &TaskSet{
 		Tasks: []*Task{{TestFunction: "TestSum"}},
 	}
-	w := NewWorker(context.Background(), job, taskSet)
-	if err := w.Start(); err != nil {
+	w := NewWorker(job, taskSet)
+	if err := w.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
