@@ -21,10 +21,10 @@ const (
 
 // TestRequest represents the input data to the test API.
 type TestRequest struct {
-	Path      string  `json:"path"`
-	Ranges    []Range `json:"ranges"`
-	BuildTags string  `json:"build_tags"`
-	Bypass    bool    `json:"bypass"`
+	Path          string   `json:"path"`
+	Ranges        []Range  `json:"ranges"`
+	Bypass        bool     `json:"bypass"`
+	GoTestOptions []string `json:"go_test_options"`
 }
 
 // Range represents the some range of the file.

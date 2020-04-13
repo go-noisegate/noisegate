@@ -2,23 +2,24 @@ package server
 
 import "sync"
 
-type ChangeManager struct {
-	m   map[string][]change
+type changeManager struct {
+	m   map[string][]Change
 	mtx sync.Mutex
 }
 
-type change struct {
-	filename string
+// Change represents the change of some region in the file.
+type Change struct {
+	Filename string
 	// [begin, end], inclusive
-	begin, end int
+	Begin, End int
 }
 
-func NewChangeManager() ChangeManager {
-	return ChangeManager{m: make(map[string][]change)}
+func newChangeManager() changeManager {
+	return changeManager{m: make(map[string][]Change)}
 }
 
 // Add adds the new change.
-func (m ChangeManager) Add(dirPath string, ch change) {
+func (m changeManager) Add(dirPath string, ch Change) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -26,19 +27,17 @@ func (m ChangeManager) Add(dirPath string, ch change) {
 }
 
 // Find finds the current change list.
-func (m ChangeManager) Find(dirPath string) []change {
+func (m changeManager) Find(dirPath string) []Change {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
 	return m.m[dirPath]
 }
 
-// Pop returns the current change list and remove it from the manager.
-func (m ChangeManager) Pop(dirPath string) []change {
+// Delete deletes the current change list.
+func (m changeManager) Delete(dirPath string) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	ch := m.m[dirPath]
 	delete(m.m, dirPath)
-	return ch
 }

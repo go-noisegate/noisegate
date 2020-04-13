@@ -19,10 +19,10 @@ import (
 
 // TestOptions represents the options which the test action accepts.
 type TestOptions struct {
-	ServerAddr string
-	TestLogger io.Writer
-	BuildTags  string
-	Bypass     bool
+	ServerAddr    string
+	TestLogger    io.Writer
+	Bypass        bool
+	GoTestOptions []string
 }
 
 // TestAction runs the test of the packages related to the specified file.
@@ -41,7 +41,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.TestRequest{Path: path, Ranges: ranges, BuildTags: options.BuildTags, Bypass: options.Bypass}
+	reqData := common.TestRequest{Path: path, Ranges: ranges, Bypass: options.Bypass, GoTestOptions: options.GoTestOptions}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err

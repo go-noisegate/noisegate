@@ -18,7 +18,7 @@ func main() {
 				Name:      "test",
 				Aliases:   []string{"t"},
 				Usage:     "Run a test",
-				ArgsUsage: "[changed_file_path:#offset1,#offset2,... (e.g. sum.go:#0,#1-2,#4)]",
+				ArgsUsage: "[filepath:#offset,... (e.g. sum.go:#0,#1-2)] -- [go test options]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
 						return errors.New("the file path is not specified")
@@ -27,15 +27,13 @@ func main() {
 					log.EnableDebugLog(c.Bool("debug"))
 
 					query := c.Args().First()
-					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, BuildTags: c.String("tags"), Bypass: c.Bool("bypass")}
+					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, Bypass: c.Bool("bypass")}
+					if c.Args().Len() > 1 && c.Args().Get(1) == "--" {
+						options.GoTestOptions = c.Args().Slice()[2:]
+					}
 					return client.TestAction(c.Context, query, options)
 				},
 				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:  "tags",
-						Usage: "a comma-separated list of build tags.",
-						Value: "",
-					},
 					&cli.BoolFlag{
 						Name:  "bypass",
 						Usage: "do not exclude any tests.",
@@ -45,7 +43,7 @@ func main() {
 			{
 				Name:      "hint",
 				Usage:     "Hint the recent change of the specified file",
-				ArgsUsage: "[changed_file_path:#offset1,#offset2,... (e.g. sum.go:#0,#1-2,#4)]",
+				ArgsUsage: "[filepath:#offset,... (e.g. sum.go:#0,#1-2)]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
 						return errors.New("the target file or directory path is not specified")

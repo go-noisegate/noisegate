@@ -48,15 +48,15 @@ func TestWorker_StartAndWait(t *testing.T) {
 			waitErr:     false,
 		},
 		{
-			PackagePath: "/path/to/not/exist/file",
-			Tasks:       []string{},
+			PackagePath: filepath.Join("testdata", "build_error"),
+			Tasks:       []string{}, // build even if there is no tasks
 			startErr:    false,
-			waitErr:     false,
+			waitErr:     true,
 		},
 	}
 
 	for i, testCase := range testCases {
-		w := &Worker{
+		w := &worker{
 			packagePath: testCase.PackagePath,
 			testFuncs:   testCase.Tasks,
 		}
@@ -80,13 +80,14 @@ func TestWorker_CheckOutput(t *testing.T) {
 
 	var buff strings.Builder
 	job := &Job{
-		DirPath: filepath.Join(currDir, "testdata", "typical"),
-		writer:  &buff,
+		DirPath:       filepath.Join(currDir, "testdata", "typical"),
+		GoTestOptions: []string{"-v"},
+		writer:        &buff,
 	}
 	taskSet := &TaskSet{
 		Tasks: []*Task{{TestFunction: "TestSum"}},
 	}
-	w := NewWorker(job, taskSet)
+	w := newWorker(job, taskSet)
 	if err := w.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -105,13 +106,13 @@ func TestWorker_WithBuildTags(t *testing.T) {
 	currDir, _ := os.Getwd()
 
 	job := &Job{
-		DirPath:   filepath.Join(currDir, "testdata", "buildtags"),
-		BuildTags: "example",
+		DirPath:       filepath.Join(currDir, "testdata", "buildtags"),
+		GoTestOptions: []string{"-tags", "example"},
 	}
 	taskSet := &TaskSet{
 		Tasks: []*Task{{TestFunction: "TestSum"}},
 	}
-	w := NewWorker(job, taskSet)
+	w := newWorker(job, taskSet)
 	if err := w.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -119,5 +120,32 @@ func TestWorker_WithBuildTags(t *testing.T) {
 	passed, err := w.Wait()
 	if err != nil || !passed {
 		t.Fatalf("unexpected result: %v, %v", passed, err)
+	}
+}
+
+func TestWorker_WithRunOptions(t *testing.T) {
+	currDir, _ := os.Getwd()
+
+	var buff strings.Builder
+	job := &Job{
+		DirPath:       filepath.Join(currDir, "testdata", "typical"),
+		GoTestOptions: []string{"-run", "TestSum_ErrorCase", "-v"},
+		writer:        &buff,
+	}
+	taskSet := &TaskSet{
+		Tasks: []*Task{{TestFunction: "TestSum"}},
+	}
+	w := newWorker(job, taskSet)
+	if err := w.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	passed, err := w.Wait()
+	if err != nil || !passed {
+		t.Fatalf("unexpected result: %v, %v", passed, err)
+	}
+
+	if !strings.Contains(buff.String(), "--- PASS: TestSum_ErrorCase") {
+		t.Errorf("unexpected content: %s", buff.String())
 	}
 }

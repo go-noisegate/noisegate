@@ -14,32 +14,17 @@ import (
 	"github.com/ks888/noisegate/common/log"
 )
 
-var sharedDir string
-
-// SetUpSharedDir initializes the specified directory.
-func SetUpSharedDir(dir string) {
-	sharedDir = dir
-	os.Mkdir(filepath.Join(sharedDir, "bin"), os.ModePerm)
-	os.Mkdir(filepath.Join(sharedDir, "lib"), os.ModePerm)
-	os.Mkdir(filepath.Join(sharedDir, "log"), os.ModePerm)
-	os.Mkdir(filepath.Join(sharedDir, "log", "job"), os.ModePerm)
-	os.Mkdir(filepath.Join(sharedDir, "src"), os.ModePerm)
-
-	log.Debugf("shared dir: %s", sharedDir)
-}
-
 // Server serves the APIs for the cli client.
 type Server struct {
 	*http.Server
-	changeManager ChangeManager
-	depthLimit    int
+	changeManager changeManager
 }
 
 // NewServer returns a new server.
 // We can use only one server instance in the process even if the address is different.
 func NewServer(addr string) Server {
 	s := Server{
-		changeManager: NewChangeManager(),
+		changeManager: newChangeManager(),
 	}
 
 	mux := http.NewServeMux()
@@ -52,7 +37,7 @@ func NewServer(addr string) Server {
 	return s
 }
 
-// Shutdown shutdowns the http server.
+// Shutdown shutdowns the server.
 func (s Server) Shutdown(ctx context.Context) error {
 	return s.Server.Shutdown(ctx)
 }
@@ -88,7 +73,7 @@ func (s Server) handleHint(w http.ResponseWriter, r *http.Request) {
 
 	if !fi.IsDir() {
 		for _, r := range input.Ranges {
-			s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, r.Begin, r.End})
+			s.changeManager.Add(filepath.Dir(input.Path), Change{input.Path, r.Begin, r.End})
 		}
 	}
 	w.Write([]byte("accepted\n"))
@@ -119,7 +104,7 @@ func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 	if !fi.IsDir() {
 		pathDir = filepath.Dir(input.Path)
 		for _, r := range input.Ranges {
-			s.changeManager.Add(filepath.Dir(input.Path), change{input.Path, r.Begin, r.End})
+			s.changeManager.Add(filepath.Dir(input.Path), Change{input.Path, r.Begin, r.End})
 		}
 	}
 
@@ -132,7 +117,7 @@ func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respWriter := newFlushWriter(w)
-	job, err := NewJob(pathDir, s.changeManager.Pop(pathDir), input.BuildTags, input.Bypass, respWriter)
+	job, err := NewJob(pathDir, s.changeManager.Find(pathDir), input.GoTestOptions, input.Bypass, respWriter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -142,20 +127,14 @@ func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Debugf("start job %d\n", job.ID)
-	respWriter.Write([]byte(fmt.Sprintf("Changed: [%s]\n", strings.Join(job.ChangedIdentityNames(), ", "))))
+	respWriter.Write([]byte(fmt.Sprintf("Changed: [%s]\n", strings.Join(job.changedIdentityNames(), ", "))))
 
-	ctx := context.Background()
-	job.Start(ctx)
-
-	s.WaitJob(job)
-}
-
-func (s Server) WaitJob(job *Job) {
-	job.Wait()
+	job.Run(context.Background())
 
 	result := "FAIL"
 	if job.Status == JobStatusSuccessful {
 		result = "PASS"
+		s.changeManager.Delete(pathDir)
 	}
 
 	fmt.Fprintf(job.writer, "%s (%v)\n", result, job.ElapsedTestTime)

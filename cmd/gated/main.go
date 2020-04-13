@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
@@ -48,13 +47,6 @@ func main() {
 func runServer(addr string) error {
 	tmpDir := "/tmp/noisegate"
 	_ = os.Mkdir(tmpDir, os.ModePerm) // may exist already
-
-	sharedDir, err := ioutil.TempDir(tmpDir, "noisegate")
-	if err != nil {
-		return fmt.Errorf("failed to create the directory to store the test binary: %w", err)
-	}
-	defer os.RemoveAll(sharedDir)
-	server.SetUpSharedDir(sharedDir)
 
 	server := server.NewServer(addr)
 	shutdownDoneCh := make(chan struct{})

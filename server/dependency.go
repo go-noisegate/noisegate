@@ -30,11 +30,11 @@ type influence struct {
 //   For example, if the offset specifies the last line of some non-test function, it finds the name of the function (e.g. `Sum`) first,
 //   and then finds the test functions which directly call the function (e.g. `TestSum1` and `TestSum2`).
 // Note that if the found test function is a part of the test suite, the runner function of the test suite is returned.
-func FindInfluencedTests(ctxt *build.Context, changes []change) ([]influence, error) {
+func findInfluencedTests(ctxt *build.Context, changes []Change) ([]influence, error) {
 	if len(changes) == 0 {
 		return nil, nil
 	}
-	dir := filepath.Dir(changes[0].filename)
+	dir := filepath.Dir(changes[0].Filename)
 	pkg, err := newParsedPackage(ctxt, dir)
 	if err != nil {
 		if _, ok := err.(*build.NoGoError); ok {
@@ -45,8 +45,8 @@ func FindInfluencedTests(ctxt *build.Context, changes []change) ([]influence, er
 
 	var ins []influence
 	for _, ch := range changes {
-		for offset := ch.begin; offset <= ch.end; offset++ {
-			in, err := pkg.findInfluence(ch.filename, offset)
+		for offset := ch.Begin; offset <= ch.End; offset++ {
+			in, err := pkg.findInfluence(ch.Filename, offset)
 			if err != nil {
 				log.Print(err)
 				continue

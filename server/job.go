@@ -22,14 +22,13 @@ type Job struct {
 	ID                               int64
 	DirPath                          string
 	Status                           JobStatus
-	BuildTags                        string
+	GoTestOptions                    []string
 	CreatedAt, StartedAt, FinishedAt time.Time
 	// build time is not included
 	ElapsedTestTime time.Duration
 	TaskSets        []*TaskSet
 	Tasks           []*Task
 	influences      []influence
-	jobFinishedCh   chan struct{}
 	writer          io.Writer
 }
 
@@ -42,16 +41,14 @@ const (
 	JobStatusFailed
 )
 
-// NewJob returns the new job. `changedFilename` and `changedOffset` specifies the position
-// where the package is changed. If `changedFilename` is not empty, important test functions are executed first.
-func NewJob(dirPath string, changes []change, tags string, bypass bool, w io.Writer) (*Job, error) {
+// NewJob returns the new job.
+func NewJob(dirPath string, changes []Change, goTestOpts []string, bypass bool, w io.Writer) (*Job, error) {
 	job := &Job{
 		ID:            generateID(),
 		DirPath:       dirPath,
 		Status:        JobStatusCreated,
-		BuildTags:     tags,
+		GoTestOptions: goTestOpts,
 		CreatedAt:     time.Now(),
-		jobFinishedCh: make(chan struct{}),
 		writer:        w,
 	}
 
@@ -79,8 +76,8 @@ func NewJob(dirPath string, changes []change, tags string, bypass bool, w io.Wri
 				log.Debugf("dep analysis time: %v\n", time.Since(start))
 			}()
 			ctxt := &build.Default
-			ctxt.BuildTags = strings.Split(tags, ",")
-			infs, err = FindInfluencedTests(ctxt, changes)
+			ctxt.BuildTags = strings.Split(findOptionValue(goTestOpts, "tags"), ",")
+			infs, err = findInfluencedTests(ctxt, changes)
 
 			if log.DebugLogEnabled() {
 				for _, inf := range infs {
@@ -117,7 +114,7 @@ func NewJob(dirPath string, changes []change, tags string, bypass bool, w io.Wri
 	ts := NewTaskSet(0, job)
 	for _, testFuncName := range <-funcNamesCh {
 		_, ok := influenced[testFuncName]
-		t := &Task{TestFunction: testFuncName, Important: ok, Job: job}
+		t := &Task{TestFunction: testFuncName, Important: ok}
 		job.Tasks = append(job.Tasks, t)
 
 		if ok || bypass {
@@ -179,40 +176,48 @@ func generateID() int64 {
 	return atomic.AddInt64(&jobIDCounter, 1)
 }
 
-// Start starts all the task sets.
-func (j *Job) Start(ctx context.Context) {
+func findOptionValue(opts []string, keyWithoutHyphen string) string {
+	i := findOptionValueIndex(opts, keyWithoutHyphen)
+	if i == -1 {
+		return ""
+	}
+	return opts[i]
+}
+
+func findOptionValueIndex(opts []string, keyWithoutHyphen string) int {
+	for i, opt := range opts {
+		if opt == "-"+keyWithoutHyphen || opt == "--"+keyWithoutHyphen {
+			if i+1 < len(opts) {
+				return i + 1
+			}
+		}
+	}
+	return -1
+}
+
+// Run runs all the task sets in order (not in parallel).
+func (j *Job) Run(ctx context.Context) {
 	if log.DebugLogEnabled() {
 		for _, taskSet := range j.TaskSets {
 			var ts []string
 			for _, t := range taskSet.Tasks {
 				ts = append(ts, t.TestFunction)
 			}
-			log.Debugf("task set %d: [%v]\n", taskSet.ID, ts)
+			log.Debugf("task set %d: %v\n", taskSet.ID, ts)
 		}
 	}
 
 	j.StartedAt = time.Now()
 
+	successful := true
 	for _, taskSet := range j.TaskSets {
 		if err := taskSet.Start(ctx); err != nil {
 			log.Printf("failed to start the worker: %v", err)
 		}
-	}
-}
-
-// Wait waits all the task sets finished.
-func (j *Job) Wait() {
-	successful := true
-	for _, taskSet := range j.TaskSets {
 		taskSet.Wait()
 
-		if taskSet.Status == TaskSetStatusSuccessful {
-			continue
-		} else if taskSet.Status == TaskSetStatusFailed {
+		if taskSet.Status == TaskSetStatusFailed {
 			successful = false
-		} else {
-			log.Printf("can not finish the job %d yet\n", j.ID)
-			return
 		}
 	}
 
@@ -222,26 +227,13 @@ func (j *Job) Wait() {
 		j.Status = JobStatusFailed
 	}
 	j.FinishedAt = time.Now()
-
-	close(j.jobFinishedCh)
 }
 
-// ChangedIdentityNames returns the list of the changed identities.
-func (j *Job) ChangedIdentityNames() (result []string) {
+func (j *Job) changedIdentityNames() (result []string) {
 	for _, inf := range j.influences {
 		result = append(result, inf.from.Name())
 	}
 	return result
-}
-
-// HasAffectedTests returns true when the job has at least 1 affected test.
-func (j *Job) HasAffectedTests() bool {
-	for _, inf := range j.influences {
-		if len(inf.to) > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 // TaskSet represents the set of tasks handled by one worker.
@@ -251,8 +243,8 @@ type TaskSet struct {
 	Status                TaskSetStatus
 	StartedAt, FinishedAt time.Time
 	Tasks                 []*Task
-	Job                   *Job
-	Worker                *Worker
+	job                   *Job
+	worker                *worker
 }
 
 // TaskSetStatus represents the status of the task set.
@@ -270,7 +262,7 @@ func NewTaskSet(id int, job *Job) *TaskSet {
 	return &TaskSet{
 		ID:     id,
 		Status: TaskSetStatusCreated,
-		Job:    job,
+		job:    job,
 	}
 }
 
@@ -279,14 +271,13 @@ func (s *TaskSet) Start(ctx context.Context) error {
 	s.StartedAt = time.Now()
 	s.Status = TaskSetStatusStarted
 
-	s.Worker = NewWorker(s.Job, s)
-	return s.Worker.Start(ctx)
+	s.worker = newWorker(s.job, s)
+	return s.worker.Start(ctx)
 }
 
 // Wait waits the worker finished.
-// TODO: support context
 func (s *TaskSet) Wait() {
-	successful, _ := s.Worker.Wait()
+	successful, _ := s.worker.Wait()
 
 	s.FinishedAt = time.Now()
 	if successful {
@@ -300,5 +291,4 @@ func (s *TaskSet) Wait() {
 type Task struct {
 	TestFunction string
 	Important    bool
-	Job          *Job
 }

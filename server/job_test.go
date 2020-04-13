@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"go/ast"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,12 +12,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	dir, err := ioutil.TempDir("", "noisegate")
-	if err != nil {
-		log.Fatalf("failed to create temp dir: %v", err)
-	}
-	SetUpSharedDir(dir)
-
 	log.EnableDebugLog(true)
 
 	os.Exit(m.Run())
@@ -28,7 +21,7 @@ func TestNewJob(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata", "typical")
 
-	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", false, nil)
+	job, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -40,9 +33,9 @@ func TestNewJob(t *testing.T) {
 	}
 
 	expectedTasks := []Task{
-		{TestFunction: "TestSum", Job: job},
-		{TestFunction: "TestSum_ErrorCase", Job: job},
-		{TestFunction: "TestSum_Add1", Job: job},
+		{TestFunction: "TestSum"},
+		{TestFunction: "TestSum_ErrorCase"},
+		{TestFunction: "TestSum_Add1"},
 	}
 	if len(expectedTasks) != len(job.Tasks) {
 		t.Errorf("invalid number of tasks: %d, %#v", len(job.Tasks), job.Tasks)
@@ -56,7 +49,7 @@ func TestNewJob(t *testing.T) {
 
 func TestNewJob_InvalidDirPath(t *testing.T) {
 	dirPath := "/not/exist/dir"
-	_, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", false, nil)
+	_, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, false, nil)
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
@@ -72,7 +65,7 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
-				job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "README.md"), 0, 0}}, "", false, nil)
+				job, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "README.md"), 0, 0}}, nil, false, nil)
 				if err != nil {
 					panic(err)
 				}
@@ -98,12 +91,12 @@ func TestNewJob_WithBuildTags(t *testing.T) {
 	}
 	dirPath := filepath.Join(currDir, "testdata", "buildtags")
 
-	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 63, 63}}, "example", false, nil)
+	job, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "sum.go"), 63, 63}}, []string{"-tags", "example"}, false, nil)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
-	if job.BuildTags != "example" {
-		t.Errorf("wrong bulid tags: %s", job.BuildTags)
+	if !reflect.DeepEqual(job.GoTestOptions, []string{"-tags", "example"}) {
+		t.Errorf("wrong bulid tags: %s", job.GoTestOptions)
 	}
 	if len(job.influences) != 1 {
 		t.Fatalf("wrong # of influences: %v", len(job.influences))
@@ -119,28 +112,63 @@ func TestNewJob_WithBuildTags(t *testing.T) {
 	}
 }
 
-func TestJob_StartAndWait(t *testing.T) {
+func TestJob_Run(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata", "typical")
 
-	job, err := NewJob(dirPath, []change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, "", false, nil)
+	job, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
+	job.TaskSets = []*TaskSet{NewTaskSet(0, job), NewTaskSet(1, job)}
 
-	job.Start(context.Background())
-	job.Wait()
+	job.Run(context.Background())
 	if job.Status != JobStatusSuccessful {
 		t.Errorf("wrong status: %v", job.Status)
 	}
-	<-job.jobFinishedCh
+	if job.TaskSets[0].Status != TaskSetStatusSuccessful {
+		t.Errorf("wrong status: %v", job.Status)
+	}
+	if job.TaskSets[1].Status != TaskSetStatusSuccessful {
+		t.Errorf("wrong status: %v", job.Status)
+	}
 }
 
 func TestJob_ChangedIdentityNames(t *testing.T) {
 	j := &Job{influences: []influence{{from: defaultIdentity{ast.NewIdent("FuncA")}}, {from: defaultIdentity{ast.NewIdent("FuncB")}}}}
-	names := j.ChangedIdentityNames()
+	names := j.changedIdentityNames()
 	if !reflect.DeepEqual([]string{"FuncA", "FuncB"}, names) {
 		t.Errorf("wrong list: %#v", names)
+	}
+}
+
+func TestFindOptionValue(t *testing.T) {
+	if result := findOptionValue([]string{"-tags", "integration_test"}, "tags"); result != "integration_test" {
+		t.Errorf("wrong result: %s", result)
+	}
+
+	if result := findOptionValue([]string{"--tags", "integration_test"}, "tags"); result != "integration_test" {
+		t.Errorf("wrong result: %s", result)
+	}
+
+	if result := findOptionValue([]string{"-tags", "tag1,tag2"}, "tags"); result != "tag1,tag2" {
+		t.Errorf("wrong result: %s", result)
+	}
+
+	if result := findOptionValue([]string{"-tags"}, "tags"); result != "" {
+		t.Errorf("wrong result: %s", result)
+	}
+
+	if result := findOptionValue([]string{"-wrong-tags", "tag1"}, "tags"); result != "" {
+		t.Errorf("wrong result: %s", result)
+	}
+
+	if result := findOptionValue([]string{"-v"}, "tags"); result != "" {
+		t.Errorf("wrong result: %s", result)
+	}
+
+	if result := findOptionValue([]string{""}, "tags"); result != "" {
+		t.Errorf("wrong result: %s", result)
 	}
 }
 
@@ -155,7 +183,7 @@ func TestTaskSet(t *testing.T) {
 	if set.StartedAt.IsZero() {
 		t.Errorf("StartedAt is zero")
 	}
-	if set.Worker == nil {
+	if set.worker == nil {
 		t.Errorf("nil worker")
 	}
 
