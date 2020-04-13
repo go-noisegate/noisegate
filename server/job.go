@@ -2,19 +2,16 @@ package server
 
 import (
 	"context"
-	"errors"
 	"go/build"
 	"io"
 	"io/ioutil"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/ks888/noisegate/common/log"
-	"go.uber.org/multierr"
 )
 
 // Job represents the job to test one package.
@@ -42,7 +39,7 @@ const (
 )
 
 // NewJob returns the new job.
-func NewJob(dirPath string, changes []Change, goTestOpts []string, bypass bool, w io.Writer) (*Job, error) {
+func NewJob(dirPath string, changes []Change, goTestOpts []string, w io.Writer) (*Job, error) {
 	job := &Job{
 		ID:            generateID(),
 		DirPath:       dirPath,
@@ -52,81 +49,54 @@ func NewJob(dirPath string, changes []Change, goTestOpts []string, bypass bool, 
 		writer:        w,
 	}
 
-	errCh := make(chan error)
-	funcNamesCh := make(chan []string, 1)
-	influencesCh := make(chan []influence, 1)
+	testFuncNames, err := retrieveTestFuncNames(dirPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(changes) == 0 {
+		selectTasksWhenNoChange(job, testFuncNames)
+		return job, nil
+	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		testFuncNames, err := retrieveTestFuncNames(dirPath)
-		errCh <- err
-		funcNamesCh <- testFuncNames
+	for _, ch := range changes {
+		if ch.Basename == "" {
+			selectTasksWhenAllChanged(job, testFuncNames)
+			return job, nil
+		}
+	}
+
+	start := time.Now()
+	defer func() {
+		log.Debugf("dep analysis time: %v\n", time.Since(start))
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var infs []influence
-		var err error
-		if len(changes) > 0 {
-			start := time.Now()
-			defer func() {
-				log.Debugf("dep analysis time: %v\n", time.Since(start))
-			}()
-			ctxt := &build.Default
-			ctxt.BuildTags = strings.Split(findOptionValue(goTestOpts, "tags"), ",")
-			infs, err = findInfluencedTests(ctxt, changes)
+	ctxt := &build.Default
+	ctxt.BuildTags = strings.Split(findOptionValue(goTestOpts, "tags"), ",")
+	job.influences, err = findInfluencedTests(ctxt, job.DirPath, changes)
+	if err != nil {
+		return nil, err
+	}
 
-			if log.DebugLogEnabled() {
-				for _, inf := range infs {
-					var fs []string
-					for f := range inf.to {
-						fs = append(fs, f)
-					}
-					log.Debugf("%v -> [%v]\n", inf.from.Name(), strings.Join(fs, ", "))
-				}
+	if log.DebugLogEnabled() {
+		for _, inf := range job.influences {
+			var fs []string
+			for f := range inf.to {
+				fs = append(fs, f)
 			}
-		}
-		errCh <- err
-		influencesCh <- infs
-	}()
-
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
-
-	var err error
-	for e := range errCh {
-		err = multierr.Combine(err, e)
-	}
-	// assumes the go routines send the data anyway
-	job.influences = <-influencesCh
-	influenced := make(map[string]struct{})
-	for _, inf := range job.influences {
-		for k := range inf.to {
-			influenced[k] = struct{}{}
+			log.Debugf("%v -> [%v]\n", inf.from.Name(), strings.Join(fs, ", "))
 		}
 	}
 
-	ts := NewTaskSet(0, job)
-	for _, testFuncName := range <-funcNamesCh {
-		_, ok := influenced[testFuncName]
-		t := &Task{TestFunction: testFuncName, Important: ok}
-		job.Tasks = append(job.Tasks, t)
-
-		if ok || bypass {
-			ts.Tasks = append(ts.Tasks, t)
-		}
-	}
-	job.TaskSets = []*TaskSet{ts}
-
+	selectInfluencedTasks(job, testFuncNames)
 	return job, err
 }
 
-var errNoGoTestFiles = errors.New("no go test files")
+var jobIDCounter int64
+
+// generateID generates the unique id. This id is unique only among this server process.
+func generateID() int64 {
+	return atomic.AddInt64(&jobIDCounter, 1)
+}
 
 var patternTestFuncName = regexp.MustCompile(`(?m)^ *func *(Test[^(]+)`)
 
@@ -169,11 +139,42 @@ func retrieveTestFuncNames(dirPath string) ([]string, error) {
 	return testFuncNames, nil
 }
 
-var jobIDCounter int64
+func selectTasksWhenNoChange(job *Job, testFuncNames []string) {
+	for _, testFuncName := range testFuncNames {
+		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName})
+	}
+	job.TaskSets = []*TaskSet{NewTaskSet(0, job)}
+}
 
-// generateID generates the unique id. This id is unique only among this server process.
-func generateID() int64 {
-	return atomic.AddInt64(&jobIDCounter, 1)
+func selectTasksWhenAllChanged(job *Job, testFuncNames []string) {
+	ts := NewTaskSet(0, job)
+	for _, testFuncName := range testFuncNames {
+		t := &Task{TestFunction: testFuncName, Important: true}
+		job.Tasks = append(job.Tasks, t)
+		ts.Tasks = append(ts.Tasks, t)
+	}
+	job.TaskSets = []*TaskSet{ts}
+}
+
+func selectInfluencedTasks(job *Job, testFuncNames []string) {
+	influenced := make(map[string]struct{})
+	for _, inf := range job.influences {
+		for k := range inf.to {
+			influenced[k] = struct{}{}
+		}
+	}
+
+	ts := NewTaskSet(0, job)
+	for _, testFuncName := range testFuncNames {
+		_, ok := influenced[testFuncName]
+		t := &Task{TestFunction: testFuncName, Important: ok}
+		job.Tasks = append(job.Tasks, t)
+
+		if ok {
+			ts.Tasks = append(ts.Tasks, t)
+		}
+	}
+	job.TaskSets = []*TaskSet{ts}
 }
 
 func findOptionValue(opts []string, keyWithoutHyphen string) string {

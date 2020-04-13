@@ -9,7 +9,7 @@ type changeManager struct {
 
 // Change represents the change of some region in the file.
 type Change struct {
-	Filename string
+	Basename string
 	// [begin, end], inclusive
 	Begin, End int
 }

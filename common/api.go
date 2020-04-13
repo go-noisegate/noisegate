@@ -23,7 +23,6 @@ const (
 type TestRequest struct {
 	Path          string   `json:"path"`
 	Ranges        []Range  `json:"ranges"`
-	Bypass        bool     `json:"bypass"`
 	GoTestOptions []string `json:"go_test_options"`
 }
 

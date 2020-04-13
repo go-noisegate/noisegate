@@ -21,7 +21,6 @@ import (
 type TestOptions struct {
 	ServerAddr    string
 	TestLogger    io.Writer
-	Bypass        bool
 	GoTestOptions []string
 }
 
@@ -41,7 +40,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.TestRequest{Path: path, Ranges: ranges, Bypass: options.Bypass, GoTestOptions: options.GoTestOptions}
+	reqData := common.TestRequest{Path: path, Ranges: ranges, GoTestOptions: options.GoTestOptions}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err

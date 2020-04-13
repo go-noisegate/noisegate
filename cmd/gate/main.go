@@ -27,17 +27,11 @@ func main() {
 					log.EnableDebugLog(c.Bool("debug"))
 
 					query := c.Args().First()
-					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, Bypass: c.Bool("bypass")}
+					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout}
 					if c.Args().Len() > 1 && c.Args().Get(1) == "--" {
 						options.GoTestOptions = c.Args().Slice()[2:]
 					}
 					return client.TestAction(c.Context, query, options)
-				},
-				Flags: []cli.Flag{
-					&cli.BoolFlag{
-						Name:  "bypass",
-						Usage: "do not exclude any tests.",
-					},
 				},
 			},
 			{

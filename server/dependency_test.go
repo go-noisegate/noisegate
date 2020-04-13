@@ -12,8 +12,8 @@ import (
 
 func TestFindInfluencedTests_Function(t *testing.T) {
 	cwd, _ := os.Getwd()
-	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum.go")
-	influences, err := findInfluencedTests(&build.Default, []Change{{pkgPath, 35, 35}})
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum.go", 35, 35}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,8 +33,8 @@ func TestFindInfluencedTests_Function(t *testing.T) {
 
 func TestFindInfluencedTests_TestFunction(t *testing.T) {
 	cwd, _ := os.Getwd()
-	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	influences, err := findInfluencedTests(&build.Default, []Change{{pkgPath, 67, 67}})
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", 67, 67}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +51,8 @@ func TestFindInfluencedTests_TestFunction(t *testing.T) {
 
 func TestFindInfluencedTests_TestSuite(t *testing.T) {
 	cwd, _ := os.Getwd()
-	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	influences, err := findInfluencedTests(&build.Default, []Change{{pkgPath, 304, 304}})
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", 304, 304}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +69,8 @@ func TestFindInfluencedTests_TestSuite(t *testing.T) {
 
 func TestFindInfluencedTests_IdentityNotFound(t *testing.T) {
 	cwd, _ := os.Getwd()
-	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	influences, err := findInfluencedTests(&build.Default, []Change{{pkgPath, 0, 0}})
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", 0, 0}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,8 +81,8 @@ func TestFindInfluencedTests_IdentityNotFound(t *testing.T) {
 
 func TestFindInfluencedTests_NoGoDirectory(t *testing.T) {
 	cwd, _ := os.Getwd()
-	pkgPath := filepath.Join(cwd, "testdata", "no_go_files", "README.md")
-	influences, err := findInfluencedTests(&build.Default, []Change{{pkgPath, 0, 0}})
+	dirPath := filepath.Join(cwd, "testdata", "no_go_files")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"README.md", 0, 0}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,8 +93,8 @@ func TestFindInfluencedTests_NoGoDirectory(t *testing.T) {
 
 func TestFindInfluencedTests_MultipleChanges(t *testing.T) {
 	cwd, _ := os.Getwd()
-	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum.go")
-	influences, err := findInfluencedTests(&build.Default, []Change{{pkgPath, 35, 35}, {pkgPath, 304, 304}})
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum.go", 35, 35}, {"sum.go", 304, 304}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,8 +110,8 @@ func TestFindInfluencedTests_MultipleChanges(t *testing.T) {
 
 func TestFindInfluencedTests_ChangeWithRange(t *testing.T) {
 	cwd, _ := os.Getwd()
-	pkgPath := filepath.Join(cwd, "testdata", "dependency", "sum_test.go")
-	influences, err := findInfluencedTests(&build.Default, []Change{{pkgPath, 0, 362}})
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", 0, 362}})
 	if err != nil {
 		t.Fatal(err)
 	}

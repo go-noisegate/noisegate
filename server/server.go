@@ -63,19 +63,24 @@ func (s Server) handleHint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ranges string
 	if log.DebugLogEnabled() {
-		ranges = common.RangesToQuery(input.Ranges)
-		log.Debugf("hint %s:%s\n", input.Path, ranges)
+		log.Debugf("hint %s:%s\n", input.Path, common.RangesToQuery(input.Ranges))
 	} else {
 		log.Printf("hint %s\n", input.Path)
 	}
 
-	if !fi.IsDir() {
+	if fi.IsDir() {
+		pathDir := input.Path
+		baseName := ""
+		s.changeManager.Add(pathDir, Change{baseName, 0, 0})
+	} else {
+		pathDir := filepath.Dir(input.Path)
+		baseName := filepath.Base(input.Path)
 		for _, r := range input.Ranges {
-			s.changeManager.Add(filepath.Dir(input.Path), Change{input.Path, r.Begin, r.End})
+			s.changeManager.Add(pathDir, Change{baseName, r.Begin, r.End})
 		}
 	}
+
 	w.Write([]byte("accepted\n"))
 }
 
@@ -100,24 +105,27 @@ func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("the specified path not found\n"))
 		return
 	}
-	pathDir := input.Path
-	if !fi.IsDir() {
+	var pathDir string
+	if fi.IsDir() {
+		pathDir = input.Path
+		baseName := ""
+		s.changeManager.Add(pathDir, Change{baseName, 0, 0})
+	} else {
 		pathDir = filepath.Dir(input.Path)
+		baseName := filepath.Base(input.Path)
 		for _, r := range input.Ranges {
-			s.changeManager.Add(filepath.Dir(input.Path), Change{input.Path, r.Begin, r.End})
+			s.changeManager.Add(pathDir, Change{baseName, r.Begin, r.End})
 		}
 	}
 
-	var ranges string
 	if log.DebugLogEnabled() {
-		ranges = common.RangesToQuery(input.Ranges)
-		log.Debugf("test %s:%s\n", input.Path, ranges)
+		log.Debugf("test %s:%s\n", input.Path, common.RangesToQuery(input.Ranges))
 	} else {
 		log.Printf("test %s\n", input.Path)
 	}
 
 	respWriter := newFlushWriter(w)
-	job, err := NewJob(pathDir, s.changeManager.Find(pathDir), input.GoTestOptions, input.Bypass, respWriter)
+	job, err := NewJob(pathDir, s.changeManager.Find(pathDir), input.GoTestOptions, respWriter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
