@@ -28,8 +28,8 @@ type TestRequest struct {
 
 // Range represents the some range of the file.
 type Range struct {
-	Begin int `json:"begin"`
-	End   int `json:"end"`
+	Begin int64 `json:"begin"`
+	End   int64 `json:"end"`
 }
 
 // RangesToQuery converts the specified ranges to the query.

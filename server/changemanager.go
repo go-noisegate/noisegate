@@ -11,7 +11,7 @@ type changeManager struct {
 type Change struct {
 	Basename string
 	// [begin, end], inclusive
-	Begin, End int
+	Begin, End int64
 }
 
 func newChangeManager() changeManager {

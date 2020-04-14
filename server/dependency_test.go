@@ -158,7 +158,7 @@ func TestFindEnclosingIdentity_PackageDecl(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := 0, 35
+	begin, end := int64(0), int64(35)
 	for o := begin; o < end; o++ {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if err != nil {
@@ -175,8 +175,8 @@ func TestFindEnclosingIdentity_SimpleFunc(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := 35, 75
-	for _, o := range []int{begin - 1, end} {
+	begin, end := int64(35), int64(75)
+	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
 			t.Errorf("wrong id (%d): %#v, %v", o, id, err)
@@ -223,8 +223,8 @@ func TestFindEnclosingIdentity_TopLevelVar(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := 177, 191
-	for _, o := range []int{begin - 1, end} {
+	begin, end := int64(177), int64(191)
+	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
 			t.Errorf("wrong id (%d): %#v, %v", o, id, err)
@@ -246,8 +246,8 @@ func TestFindEnclosingIdentity_TopLevelVarList(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := 193, 224
-	for _, o := range []int{begin - 1, end} {
+	begin, end := int64(193), int64(224)
+	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
 			t.Errorf("wrong id (%d): %#v, %v", o, id, err)
@@ -269,8 +269,8 @@ func TestFindEnclosingIdentity_TopLevelConst(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := 226, 238
-	for _, o := range []int{begin - 1, end} {
+	begin, end := int64(226), int64(238)
+	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
 			t.Errorf("wrong id (%d): %#v, %v", o, id, err)
@@ -292,8 +292,8 @@ func TestFindEnclosingIdentity_Type(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := 240, 265
-	for _, o := range []int{begin - 1, end} {
+	begin, end := int64(240), int64(265)
+	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
 			t.Errorf("wrong id (%d): %#v, %v", o, id, err)
@@ -315,8 +315,8 @@ func TestFindEnclosingIdentity_Method(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := 267, 311
-	for _, o := range []int{begin - 1, end} {
+	begin, end := int64(267), int64(311)
+	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
 			t.Errorf("wrong id (%d): %#v, %v", o, id, err)
@@ -338,8 +338,8 @@ func TestFindEnclosingIdentity_PointerReceiverMethod(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := 358, 403
-	for _, o := range []int{begin - 1, end} {
+	begin, end := int64(358), int64(403)
+	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
 			t.Errorf("wrong id (%d): %#v, %v", o, id, err)

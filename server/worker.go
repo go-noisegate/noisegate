@@ -6,6 +6,8 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+
+	"github.com/ks888/noisegate/common/log"
 )
 
 type worker struct {
@@ -40,6 +42,8 @@ func (w *worker) Start(ctx context.Context) error {
 	} else {
 		args = append(args, "-run", runOptValue)
 	}
+	args = append(args, ".")
+	log.Debugf("go test command: go %s\n", strings.Join(args, " "))
 
 	w.cmd = exec.CommandContext(ctx, "go", args...)
 	w.cmd.Dir = w.packagePath

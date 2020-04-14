@@ -106,7 +106,7 @@ func newParsedPackage(ctxt *build.Context, packageDir string) (parsedPackage, er
 	return parsedPackage{pkgDir: packageDir, pkg: astPkg, fset: fset, info: &info, found: make(map[string]struct{})}, nil
 }
 
-func (p parsedPackage) findInfluence(filename string, offset int) (influence, error) {
+func (p parsedPackage) findInfluence(filename string, offset int64) (influence, error) {
 	id, err := p.findEnclosingIdentity(filename, offset)
 	if err != nil {
 		return influence{}, err
@@ -152,15 +152,15 @@ func (p parsedPackage) findInfluence(filename string, offset int) (influence, er
 
 // findEnclosingIdentity finds the top level declaration to which the node at the specified `offset` belongs.
 // For example, if the `offset` specifies the position in the function body, it returns the identity of that function.
-func (p parsedPackage) findEnclosingIdentity(filename string, offset int) (identity, error) {
+func (p parsedPackage) findEnclosingIdentity(filename string, offset int64) (identity, error) {
 	if !path.IsAbs(filename) {
 		filename = filepath.Join(p.pkgDir, filename)
 	}
 	var pos token.Pos
 	p.fset.Iterate(func(f *token.File) bool {
 		if f.Name() == filename {
-			if offset <= f.Size() {
-				pos = f.Pos(offset)
+			if int(offset) <= f.Size() {
+				pos = f.Pos(int(offset))
 			}
 			return false
 		}
@@ -311,8 +311,15 @@ type functionIdentity struct {
 
 func (id functionIdentity) Match(n ast.Node) (*ast.Ident, bool) {
 	if other, ok := n.(*ast.Ident); ok {
-		fmt.Printf("id: %#v, %#v\n", id, id.obj)
-		fmt.Printf("other: %#v, %#v\n", other, other.Obj)
+		defer func() {
+			// sometimes panic. Need more context.
+			if r := recover(); r != nil {
+				log.Printf("panic: %v\n", r)
+				log.Printf("id: %#v, %#v\n", id, id.obj)
+				log.Printf("other: %#v, %#v\n", other, other.Obj)
+			}
+		}()
+
 		if other.Obj == id.obj && other.Pos() != id.obj.Pos() {
 			return other, true
 		}

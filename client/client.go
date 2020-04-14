@@ -131,7 +131,7 @@ func parseRanges(rawRanges string) (rs []common.Range, err error) {
 
 		index := strings.Index(r, "-")
 		if index == -1 {
-			offset, err := strconv.Atoi(r)
+			offset, err := strconv.ParseInt(r, 10, 64)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse the query: %w", err)
 			}
@@ -139,12 +139,12 @@ func parseRanges(rawRanges string) (rs []common.Range, err error) {
 			continue
 		}
 
-		begin, err := strconv.Atoi(r[0:index])
+		begin, err := strconv.ParseInt(r[0:index], 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse the query: %w", err)
 		}
 
-		end, err := strconv.Atoi(r[index+1:])
+		end, err := strconv.ParseInt(r[index+1:], 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse the query: %w", err)
 		}

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"go/build"
 	"io"
 	"io/ioutil"
@@ -21,12 +22,10 @@ type Job struct {
 	Status                           JobStatus
 	GoTestOptions                    []string
 	CreatedAt, StartedAt, FinishedAt time.Time
-	// build time is not included
-	ElapsedTestTime time.Duration
-	TaskSets        []*TaskSet
-	Tasks           []*Task
-	influences      []influence
-	writer          io.Writer
+	TaskSets                         []*TaskSet
+	Tasks                            []*Task
+	influences                       []influence
+	writer                           io.Writer
 }
 
 // JobStatus represents the status of the job.
@@ -55,19 +54,21 @@ func NewJob(dirPath string, changes []Change, goTestOpts []string, w io.Writer) 
 	}
 	if len(changes) == 0 {
 		selectTasksWhenNoChange(job, testFuncNames)
+		w.Write([]byte("Changed: []\n"))
 		return job, nil
 	}
 
 	for _, ch := range changes {
 		if ch.Basename == "" {
 			selectTasksWhenAllChanged(job, testFuncNames)
+			w.Write([]byte("Run all tests:\n"))
 			return job, nil
 		}
 	}
 
 	start := time.Now()
 	defer func() {
-		log.Debugf("dep analysis time: %v\n", time.Since(start))
+		log.Debugf("dependency analysis time: %v\n", time.Since(start))
 	}()
 
 	ctxt := &build.Default
@@ -88,6 +89,8 @@ func NewJob(dirPath string, changes []Change, goTestOpts []string, w io.Writer) 
 	}
 
 	selectInfluencedTasks(job, testFuncNames)
+
+	w.Write([]byte(fmt.Sprintf("Changed: [%s]\n", strings.Join(job.changedIdentityNames(), ", "))))
 	return job, err
 }
 
@@ -198,16 +201,6 @@ func findOptionValueIndex(opts []string, keyWithoutHyphen string) int {
 
 // Run runs all the task sets in order (not in parallel).
 func (j *Job) Run(ctx context.Context) {
-	if log.DebugLogEnabled() {
-		for _, taskSet := range j.TaskSets {
-			var ts []string
-			for _, t := range taskSet.Tasks {
-				ts = append(ts, t.TestFunction)
-			}
-			log.Debugf("task set %d: %v\n", taskSet.ID, ts)
-		}
-	}
-
 	j.StartedAt = time.Now()
 
 	successful := true

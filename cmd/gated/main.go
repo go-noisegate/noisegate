@@ -19,7 +19,7 @@ func main() {
 		Name:      filepath.Base(os.Args[0]),
 		ArgsUsage: "[server address (default: \"localhost:48059\")]",
 		Action: func(c *cli.Context) error {
-			addr := "localhost:48059" // bees
+			addr := "localhost:48059"
 			if c.NArg() > 0 {
 				addr = c.Args().First()
 			}
@@ -45,9 +45,6 @@ func main() {
 }
 
 func runServer(addr string) error {
-	tmpDir := "/tmp/noisegate"
-	_ = os.Mkdir(tmpDir, os.ModePerm) // may exist already
-
 	server := server.NewServer(addr)
 	shutdownDoneCh := make(chan struct{})
 	go func() {
