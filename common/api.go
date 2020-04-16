@@ -21,9 +21,15 @@ const (
 
 // TestRequest represents the input data to the test API.
 type TestRequest struct {
+	Bypass        bool     `json:"bypass"`
 	Path          string   `json:"path"`
-	Ranges        []Range  `json:"ranges"`
 	GoTestOptions []string `json:"go_test_options"`
+}
+
+// HintRequest represents the input data to the hint API.
+type HintRequest struct {
+	Path   string  `json:"path"`
+	Ranges []Range `json:"ranges"`
 }
 
 // Range represents the some range of the file.
@@ -39,10 +45,4 @@ func RangesToQuery(ranges []Range) string {
 		rs = append(rs, fmt.Sprintf("#%d-%d", r.Begin, r.End))
 	}
 	return strings.Join(rs, ",")
-}
-
-// HintRequest represents the input data to the hint API.
-type HintRequest struct {
-	Path   string  `json:"path"`
-	Ranges []Range `json:"ranges"`
 }

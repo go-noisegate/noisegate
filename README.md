@@ -1,76 +1,83 @@
 # Noise Gate
 
-Noise Gate is the Golang test runner with the noise reduction.
+Noise Gate is the Golang test runner to get faster test results.
 
-When you run the tests, the tool eliminates the unimportant tests for the *faster test results*.
-
-[image]()
-
-The tool is integrated with your editor plugin and knows the changes you made. When you run the tests, it selects the tests affected by recent changes.
-
-[image]()
+It selects the tests affected by your recent edits and run them using `go test`.
 
 ## Prerequisites
 
 * Go 1.13 or later
-* Linux or Mac OS X
 
 ## Quickstart
 
-You usually run this tool via the editor plugin. So the best quickstart document depends on your editor:
+You usually use this tool via the editor plugin. So the best quickstart document depends on your editor:
 * [emacs](https://github.com/ks888/noisegate.el)
 * [vscode](https://github.com/ks888/vscode-go-noisegate)
 
 (If your favorite editor is not here, please consider writing the plugin for your editor!)
 
-The document below assumes you run this tool directly, but it's unusual.
+The document below assumes you use this tool directly, but it's not usual.
 
 --
 
-This quickstart shows you how to use this tool to help your coding.
+This quickstart shows you how to use the Noise Gate to get faster test results.
+
+Usually your editor plugin sends the recent edits and the test requests to the server (`gated`). In this quickstart, we are going to send them by ourselves using the cli (`gate`).
 
 ### Set up
 
-1. The tool has the server program (`gated`) and client program (`gate`). Install both:
+1. Install the server (`gated`) and cli (`gate`):
 
    ```sh
    $ go get -u github.com/ks888/noisegate/cmd/gate && go get -u github.com/ks888/noisegate/cmd/gated
    ```
 
-2. Run the server program (`gated`) if it's not running yet.
+2. Run the server (`gated`) if it's not running yet.
 
    ```sh
    $ gated
    ```
 
-3. Download the sample repository.
+3. Download the tutorial repository.
 
    ```sh
    $ go get -u github.com/ks888/noisegate-tutorial
    ```
 
-### Coding
+### Run your tests
 
-Let's assume you just implemented some [functions](https://github.com/ks888/noisegate-tutorial/blob/master/math.go) (`SlowAdd` and `SlowSub`) and [tests](https://github.com/ks888/noisegate-tutorial/blob/master/math_test.go) (`TestSlowAdd`, `TestSlowAdd_Overflow` and `TestSlowSub`) in the `noisegate-tutorial` repository.
+Let's assume you just implemented some [functions](https://github.com/ks888/noisegate-tutorial/blob/master/math.go) (`SlowAdd` and `SlowSub`) and [tests](https://github.com/ks888/noisegate-tutorial/blob/master/math_test.go) (`TestSlowAdd`, `TestSlowAdd_Overflow` and `TestSlowSub`) at the `noisegate-tutorial` repository.
 
-1. Run your first test
+1. Run all the tests
 
-   Run the `gate test` at the repository root. With the `-bypass` option, the tool simply runs all the tests in the package.
+   First, check if all the tests are passed. Run the `gate test` command at the repository root.
 
    ```sh
    $ cd $GOPATH/src/github.com/ks888/noisegate-tutorial
-   $ gate -bypass -v test .   # absolute path is also ok
-   TODO
+   $ gate test -bypass . -- -v
+   Run all tests:
+   === RUN   TestSlowAdd
+   --- PASS: TestSlowAdd (1.01s)
+   === RUN   TestSlowAdd_Overflow
+   --- PASS: TestSlowAdd_Overflow (1.01s)
+   === RUN   TestSlowSub
+   --- FAIL: TestSlowSub (1.00s)
+       math_test.go:22: wrong result: 2
+   FAIL
+   FAIL    github.com/ks888/noisegate-tutorial     3.019s
+   FAIL
    ```
 
-   * One failed test. We will fix this next.
-   * The `gate` command supports almost all the options of the `go test` command. In this example, we pass the `-v` option.
+   * One failed test. We will fix this soon.
+   * With the `-bypass` option, the tool runs all the tests regardless of the recent changes.
+   * The `.` arg specifies the directory to run the tests.
+   * The args after `--` is passed to `go test`. `-v` is passed in this example.
 
-2. Fix the bug
+2. Change the code
 
-   Open the `math.go` and fix [the `SlowSub` function](https://github.com/ks888/noisegate-tutorial/blob/master/math.go#L12). `return a + b` at the line 12 should be `return a - b`.
+   To fix the failed test, open the `math.go` and change [the `SlowSub` function](https://github.com/ks888/noisegate-tutorial/blob/master/math.go#L12). `return a + b` at the line 12 should be `return a - b`.
 
-3. Hint the change of the `math.go`
+3. Hint the change
 
    Run the `gate hint` to notify the server of the changed filename and position.
 
@@ -78,27 +85,42 @@ Let's assume you just implemented some [functions](https://github.com/ks888/nois
    $ gate hint math.go:#176
    ```
 
-   `176` is the byte offset and points to the `-` character at the line 12. Usually your editor plugin calculates this offset.
+   `math.go` is the changed filename and `176` is the byte offset. The offset points to the `-` character at the line 12. Usually your editor plugin calculates this offset.
 
-4. Run the test again
+4. Run the tests affected by the recent changes
 
-   When you run the `gate test` again, the previous hint is considered.
+   Let's check if the test is fixed. Run the `gate test` again.
 
    ```sh
    $ gate test .
-   TODO
+   Changed: [SlowSub]
+   === RUN   TestSlowSub
+   --- PASS: TestSlowSub (1.00s)
+   PASS
+   ok      github.com/ks888/noisegate-tutorial     1.006s
    ```
 
-   *The tool knows you've changed the `SlowSub` function and runs affected tests (`TestSlowSub`) only.*
+   * Without the `-bypass` option, the tool runs the tests affected by the recent changes.
+   * The recent changes are listed at the `Changed: [SlowSub]` line. The list is cleared when all the tests are passed.
+   * Based on the recent changes, the tool selects and runs only the `TestSlowSub` test.
+   * *You get the faster test results (`3.019s` -> `1.006s`)!*
 
 ## How-to guides
 
-### Specify the build tags
+### Pass options to `go test`
 
-It's same as `go test`. Actually, the `gate` command supports almost all the options of the `go test` command.
+The args after `--` is passed to `go test`. For example, the command below passes the build tags.
 
 ```
-$ gate test --tags tags,list [filename:#offset]
+$ gate test . -- -v -tags tags,list
+```
+
+### Run all tests
+
+With the -bypass option, the tool runs all the tests regardless of the recent changes.
+
+```
+$ gate test -bypass . -- -v
 ```
 
 ## How it works

@@ -49,6 +49,7 @@ func (s Server) handleHint(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	input.Path = filepath.Clean(input.Path)
 
 	if err := s.updateChanges(input.Path, input.Ranges); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -65,6 +66,32 @@ func (s Server) handleHint(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("accepted\n"))
 }
 
+func (s Server) updateChanges(inputPath string, ranges []common.Range) error {
+	if !filepath.IsAbs(inputPath) {
+		return errors.New("the path must be abs")
+	}
+
+	fi, err := os.Stat(inputPath)
+	if os.IsNotExist(err) {
+		return errors.New("the path not exist")
+	}
+
+	if fi.IsDir() {
+		return errors.New("the path must be file")
+	}
+
+	if len(ranges) == 0 {
+		return errors.New("the range is not specified")
+	}
+
+	pathDir := filepath.Dir(inputPath)
+	baseName := filepath.Base(inputPath)
+	for _, r := range ranges {
+		s.changeManager.Add(pathDir, Change{baseName, r.Begin, r.End})
+	}
+	return nil
+}
+
 func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 	var input common.TestRequest
 	dec := json.NewDecoder(r.Body)
@@ -73,26 +100,18 @@ func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("invalid request body\n"))
 		return
 	}
+	input.Path = filepath.Clean(input.Path)
 
-	if err := s.updateChanges(input.Path, input.Ranges); err != nil {
+	if err := s.validateTestPath(input.Path); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
 	}
-	fi, _ := os.Stat(input.Path)
-	pathDir := input.Path
-	if !fi.IsDir() {
-		pathDir = filepath.Dir(input.Path)
-	}
 
-	if log.DebugLogEnabled() {
-		log.Debugf("test %s:%s\n", input.Path, common.RangesToQuery(input.Ranges))
-	} else {
-		log.Printf("test %s\n", input.Path)
-	}
+	log.Printf("test %s\n", input.Path)
 
 	respWriter := newFlushWriter(w)
-	job, err := NewJob(pathDir, s.changeManager.Find(pathDir), input.GoTestOptions, respWriter)
+	job, err := NewJob(input.Path, input.Bypass, s.changeManager.Find(input.Path), input.GoTestOptions, respWriter)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		msg := fmt.Sprintf("failed to generate a new job: %v\n", err)
@@ -105,13 +124,13 @@ func (s Server) handleTest(w http.ResponseWriter, r *http.Request) {
 	job.Run(context.Background())
 
 	if job.Status == JobStatusSuccessful {
-		s.changeManager.Delete(pathDir)
+		s.changeManager.Delete(input.Path)
 	}
 	log.Debugf("finish job #%d\n", job.ID)
 	log.Debugf("build + test time: %v\n", job.FinishedAt.Sub(job.CreatedAt))
 }
 
-func (s Server) updateChanges(inputPath string, ranges []common.Range) error {
+func (s Server) validateTestPath(inputPath string) error {
 	if !filepath.IsAbs(inputPath) {
 		return errors.New("the path must be abs")
 	}
@@ -121,19 +140,8 @@ func (s Server) updateChanges(inputPath string, ranges []common.Range) error {
 		return errors.New("the path not exist")
 	}
 
-	if fi.IsDir() {
-		s.changeManager.Add(inputPath, Change{"", 0, 0})
-		return nil
-	}
-
-	pathDir := filepath.Dir(inputPath)
-	baseName := filepath.Base(inputPath)
-	if len(ranges) == 0 {
-		s.changeManager.Add(pathDir, Change{baseName, 0, fi.Size() - 1})
-	} else {
-		for _, r := range ranges {
-			s.changeManager.Add(pathDir, Change{baseName, r.Begin, r.End})
-		}
+	if !fi.IsDir() {
+		return errors.New("the path must be directory")
 	}
 	return nil
 }

@@ -38,7 +38,7 @@ const (
 )
 
 // NewJob returns the new job.
-func NewJob(dirPath string, changes []Change, goTestOpts []string, w io.Writer) (*Job, error) {
+func NewJob(dirPath string, bypass bool, changes []Change, goTestOpts []string, w io.Writer) (*Job, error) {
 	job := &Job{
 		ID:            generateID(),
 		DirPath:       dirPath,
@@ -52,18 +52,17 @@ func NewJob(dirPath string, changes []Change, goTestOpts []string, w io.Writer) 
 	if err != nil {
 		return nil, err
 	}
-	if len(changes) == 0 {
-		selectTasksWhenNoChange(job, testFuncNames)
-		w.Write([]byte("Changed: []\n"))
+
+	if bypass {
+		selectAllTasks(job, testFuncNames)
+		w.Write([]byte("Run all tests:\n"))
 		return job, nil
 	}
 
-	for _, ch := range changes {
-		if ch.Basename == "" {
-			selectTasksWhenAllChanged(job, testFuncNames)
-			w.Write([]byte("Run all tests:\n"))
-			return job, nil
-		}
+	if len(changes) == 0 {
+		selectNoTasks(job, testFuncNames)
+		w.Write([]byte("Changed: []\n"))
+		return job, nil
 	}
 
 	start := time.Now()
@@ -142,14 +141,14 @@ func retrieveTestFuncNames(dirPath string) ([]string, error) {
 	return testFuncNames, nil
 }
 
-func selectTasksWhenNoChange(job *Job, testFuncNames []string) {
+func selectNoTasks(job *Job, testFuncNames []string) {
 	for _, testFuncName := range testFuncNames {
 		job.Tasks = append(job.Tasks, &Task{TestFunction: testFuncName})
 	}
 	job.TaskSets = []*TaskSet{NewTaskSet(0, job)}
 }
 
-func selectTasksWhenAllChanged(job *Job, testFuncNames []string) {
+func selectAllTasks(job *Job, testFuncNames []string) {
 	ts := NewTaskSet(0, job)
 	for _, testFuncName := range testFuncNames {
 		t := &Task{TestFunction: testFuncName, Important: true}

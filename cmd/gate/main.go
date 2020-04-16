@@ -10,20 +10,12 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const testCommandUsage = "Run tests based on recent changes"
+const testCommandUsage = "Run tests affected by recent changes"
 const testCommandDesc = testCommandUsage + `.
-
-   The query of this command is also considered as the recent change.
-   See the help of the 'gate hint' command for the usage of the query.
 
    Args after '--' are passed to the 'go test' command.`
 const hintCommandUsage = "Hint recent changes"
-const hintCommandDesc = hintCommandUsage + `.
-
-   Use the query to specify the change.
-   * The part of the file is changed: [filepath:#begin-end]    e.g. sum.go:#1-2
-   * The entire file is changed:      [filepath]               e.g. sum.go
-   * The entire package is changed:   [package directory path] e.g. ./pkg_dir`
+const hintCommandDesc = hintCommandUsage + `.`
 
 func main() {
 	app := &cli.App{
@@ -34,30 +26,36 @@ func main() {
 				Aliases:     []string{"t"},
 				Usage:       testCommandUsage,
 				Description: testCommandDesc,
-				ArgsUsage:   "[query (e.g. sum.go:#1-2)] -- [go test options]",
+				ArgsUsage:   "[directory path] -- [go test options]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
-						return errors.New("the file path is not specified")
+						return errors.New("the path is not specified")
 					}
 
 					log.EnableDebugLog(c.Bool("debug"))
 
 					query := c.Args().First()
-					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout}
+					options := client.TestOptions{ServerAddr: c.String("addr"), TestLogger: os.Stdout, Bypass: c.Bool("bypass")}
 					if c.Args().Len() > 1 && c.Args().Get(1) == "--" {
 						options.GoTestOptions = c.Args().Slice()[2:]
 					}
 					return client.TestAction(c.Context, query, options)
+				},
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "bypass",
+						Usage: "run all tests regardless of recent changes",
+					},
 				},
 			},
 			{
 				Name:        "hint",
 				Usage:       hintCommandUsage,
 				Description: hintCommandDesc,
-				ArgsUsage:   "[query (e.g. sum.go:#1-2)]",
+				ArgsUsage:   "[filepath:#begin-end (e.g. sum.go:#1-2)]",
 				Action: func(c *cli.Context) error {
 					if c.NArg() == 0 {
-						return errors.New("the target file or directory path is not specified")
+						return errors.New("the target file is not specified")
 					}
 
 					log.EnableDebugLog(c.Bool("debug"))

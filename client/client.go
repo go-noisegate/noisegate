@@ -21,6 +21,7 @@ import (
 type TestOptions struct {
 	ServerAddr    string
 	TestLogger    io.Writer
+	Bypass        bool
 	GoTestOptions []string
 }
 
@@ -30,6 +31,8 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 	path, ranges, err := parseQuery(query)
 	if err != nil {
 		return err
+	} else if len(ranges) > 0 {
+		return errors.New("the range is not supported")
 	}
 
 	if !filepath.IsAbs(path) {
@@ -40,7 +43,7 @@ func TestAction(ctx context.Context, query string, options TestOptions) error {
 		path = filepath.Join(curr, path)
 	}
 
-	reqData := common.TestRequest{Path: path, Ranges: ranges, GoTestOptions: options.GoTestOptions}
+	reqData := common.TestRequest{Bypass: options.Bypass, Path: path, GoTestOptions: options.GoTestOptions}
 	reqBody, err := json.Marshal(&reqData)
 	if err != nil {
 		return err

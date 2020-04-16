@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ks888/noisegate/common/log"
@@ -21,7 +22,7 @@ func TestNewJob(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata", "typical")
 
-	job, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, nil)
+	job, err := NewJob(dirPath, false, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, &strings.Builder{})
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -47,9 +48,33 @@ func TestNewJob(t *testing.T) {
 	}
 }
 
+func TestNewJob_WithBypass(t *testing.T) {
+	currDir, _ := os.Getwd()
+	dirPath := filepath.Join(currDir, "testdata", "typical")
+
+	job, err := NewJob(dirPath, true, []Change{}, nil, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("failed to create new job: %v", err)
+	}
+
+	expectedTasks := []Task{
+		{TestFunction: "TestSum", Important: true},
+		{TestFunction: "TestSum_ErrorCase", Important: true},
+		{TestFunction: "TestSum_Add1", Important: true},
+	}
+	if len(expectedTasks) != len(job.Tasks) {
+		t.Errorf("invalid number of tasks: %d, %#v", len(job.Tasks), job.Tasks)
+	}
+	for i, actualTask := range job.Tasks {
+		if !reflect.DeepEqual(expectedTasks[i], *actualTask) {
+			t.Errorf("wrong task: %#v", actualTask)
+		}
+	}
+}
+
 func TestNewJob_InvalidDirPath(t *testing.T) {
 	dirPath := "/not/exist/dir"
-	_, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, nil)
+	_, err := NewJob(dirPath, false, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, &strings.Builder{})
 	if err == nil {
 		t.Fatalf("err should not be nil: %v", err)
 	}
@@ -65,7 +90,7 @@ func TestNewJob_UniqueIDCheck(t *testing.T) {
 	for i := 0; i < numGoRoutines; i++ {
 		go func() {
 			for j := 0; j < numIter; j++ {
-				job, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "README.md"), 0, 0}}, nil, nil)
+				job, err := NewJob(dirPath, false, []Change{{filepath.Join(dirPath, "README.md"), 0, 0}}, nil, &strings.Builder{})
 				if err != nil {
 					panic(err)
 				}
@@ -91,7 +116,7 @@ func TestNewJob_WithBuildTags(t *testing.T) {
 	}
 	dirPath := filepath.Join(currDir, "testdata", "buildtags")
 
-	job, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "sum.go"), 63, 63}}, []string{"-tags", "example"}, nil)
+	job, err := NewJob(dirPath, false, []Change{{filepath.Join(dirPath, "sum.go"), 63, 63}}, []string{"-tags", "example"}, &strings.Builder{})
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
@@ -116,7 +141,7 @@ func TestJob_Run(t *testing.T) {
 	currDir, _ := os.Getwd()
 	dirPath := filepath.Join(currDir, "testdata", "typical")
 
-	job, err := NewJob(dirPath, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, nil)
+	job, err := NewJob(dirPath, false, []Change{{filepath.Join(dirPath, "sum.go"), 0, 0}}, nil, &strings.Builder{})
 	if err != nil {
 		t.Fatalf("failed to create new job: %v", err)
 	}
