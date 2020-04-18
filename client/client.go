@@ -118,6 +118,8 @@ func parseQuery(pathAndRange string) (string, []common.Range, error) {
 		return "", nil, errors.New("too many `:`")
 	} else if len(chunks) == 1 {
 		return pathAndRange, nil, nil
+	} else if chunks[1] == "" {
+		return "", nil, errors.New("range is not specified")
 	}
 
 	path := chunks[0]
@@ -128,9 +130,7 @@ func parseQuery(pathAndRange string) (string, []common.Range, error) {
 func parseRanges(rawRanges string) (rs []common.Range, err error) {
 	ranges := strings.Split(rawRanges, ",")
 	for _, r := range ranges {
-		if strings.HasPrefix(r, "#") {
-			r = r[1:]
-		}
+		r = strings.TrimPrefix(r, "#")
 
 		index := strings.Index(r, "-")
 		if index == -1 {

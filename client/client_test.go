@@ -107,6 +107,7 @@ func TestHintAction_Offsets(t *testing.T) {
 		{"#1,2", []common.Range{{1, 1}, {2, 2}}, false},
 		{"#1:#2", nil, true},
 		{"#1-", nil, true},
+		{"", nil, true},
 	} {
 		query := "/path/to/test/file:" + testdata.offset
 		options := client.HintOptions{ServerAddr: strings.TrimPrefix(server.URL, "http://")}

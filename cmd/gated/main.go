@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ks888/noisegate/common"
 	"github.com/ks888/noisegate/common/log"
 	"github.com/ks888/noisegate/server"
 	"github.com/urfave/cli/v2"
@@ -17,6 +18,7 @@ import (
 func main() {
 	app := &cli.App{
 		Name:      filepath.Base(os.Args[0]),
+		Usage:     "Server for Noise Gate",
 		ArgsUsage: "[server address (default: \"localhost:48059\")]",
 		Action: func(c *cli.Context) error {
 			addr := "localhost:48059"
@@ -35,7 +37,8 @@ func main() {
 				Value: false,
 			},
 		},
-		HideHelp: true, // to hide the `COMMANDS` section in the help message.
+		HideHelpCommand: true,
+		Version:         common.Version,
 	}
 
 	err := app.Run(os.Args)

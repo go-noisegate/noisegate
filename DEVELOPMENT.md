@@ -2,12 +2,12 @@
 
 ## How it works
 
-### Change-driven
+### Find test functions affected by recent changes
 
-The current approach to detect affected tests:
+The current approach is:
 * The editor plugin updates the list of the changes while a user edits the files.
-* When the `gate hint` command is called with the list of the changes, the server updates its internal list of the changes. It maintains the change list for each package.
-* When the `gate test` command is called, the server parses go files in the package and finds the affected test functions. The list of changes associated with the package are reset.
+* When the `gate hint` command is called with the list of the changes, the server updates its internal list of the changes. The server maintains the change list for each directory.
+* When the `gate test` command is called, the server parses go files in the package and finds the affected test functions. The list of changes associated with the directory are cleared.
 
 The detail of the last part is ([code here](https://github.com/ks888/noisegate/blob/master/server/dependency.go)):
 1. Parse go files in the package. Dependent packages are not parsed.
@@ -15,7 +15,7 @@ The detail of the last part is ([code here](https://github.com/ks888/noisegate/b
 
    2-1. Finds the top-level declaration which encloses the specified change. Typically it's function declaration.
 
-   2-2a. If the function is the test function, it's affected.
+   2-2a. If the top-level declaration is the test function, it's affected.
 
    2-2b. Otherwise, find the test functions which uses the declared element. These test functions are affected.
 

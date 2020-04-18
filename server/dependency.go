@@ -20,11 +20,11 @@ type influence struct {
 	to   map[string]struct{}
 }
 
-// FindInfluencedTests finds the test functions which related to the specified changes.
+// findInfluencedTests finds the test functions which affected by the specified changes.
 // summary:
 // 1. Finds the top-level declaration which encloses the specified offset.
 // 2-1. If the decl is the test function itself, returns the test function.
-// 2-2. Otherwise, lists the test functions which uses the identity step 1 finds. It only searches for the files in the same package.
+// 2-2. Otherwise, lists the test functions which use the identity step 1 finds. It only searches for the files in the same package.
 //   For example, if the offset specifies the last line of some non-test function, it finds the name of the function (e.g. `Sum`) first,
 //   and then finds the test functions which directly call the function (e.g. `TestSum1` and `TestSum2`).
 // Note that if the found test function is a part of the test suite, the runner function of the test suite is returned.
@@ -124,7 +124,7 @@ func (p parsedPackage) findInfluence(filename string, offset int64) (influence, 
 		to := make(map[string]struct{})
 		name := id.Name()
 		if index := strings.Index(name, "."); index != -1 {
-			// TODO: workaround to support test suite. Consider more precise approach.
+			// workaround to support test suite. TODO: find more precise approach.
 			for _, t := range []string{"Test_", "Test"} {
 				if p.pkg.Scope.Lookup(t+name[:index]) != nil {
 					to[t+name[:index]] = struct{}{}
@@ -263,7 +263,7 @@ func (p parsedPackage) findTestFunction(id *ast.Ident) string {
 				return decl.Name.Name
 			}
 
-			// TODO: workaround to support test suite. Consider more precise approach.
+			// workaround to support test suite. TODO: Find more precise approach.
 			receiverType := decl.Recv.List[0].Type
 			suiteName := p.findTypenameFromType(receiverType)
 			for _, t := range []string{"Test_", "Test"} {

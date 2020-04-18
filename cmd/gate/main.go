@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/ks888/noisegate/client"
+	"github.com/ks888/noisegate/common"
 	"github.com/ks888/noisegate/common/log"
 	"github.com/urfave/cli/v2"
 )
@@ -19,11 +20,11 @@ const hintCommandDesc = hintCommandUsage + `.`
 
 func main() {
 	app := &cli.App{
-		Name: filepath.Base(os.Args[0]),
+		Name:  filepath.Base(os.Args[0]),
+		Usage: "CLI for Noise Gate",
 		Commands: []*cli.Command{
 			{
 				Name:        "test",
-				Aliases:     []string{"t"},
 				Usage:       testCommandUsage,
 				Description: testCommandDesc,
 				ArgsUsage:   "[directory path] -- [go test options]",
@@ -78,6 +79,8 @@ func main() {
 				Value: false,
 			},
 		},
+		HideHelpCommand: true,
+		Version:         common.Version,
 	}
 
 	err := app.Run(os.Args)
