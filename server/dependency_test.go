@@ -10,10 +10,37 @@ import (
 	"testing"
 )
 
+const (
+	// sum.go
+	FuncSumDeclBegin           = 35
+	FuncSumBodyEnd             = 75
+	FuncNestedSumNestedFuncEnd = 151
+	VarV1DeclBegin             = 177
+	VarV1DeclEnd               = 191
+	VarsDeclBegin              = 193
+	VarsDeclEnd                = 224
+	ConstC1DeclBegin           = 226
+	ConstC1DeclEnd             = 238
+	TypeT1DeclBegin            = 240
+	TypeT1DeclEnd              = 265
+	FuncT1IncDeclBegin         = 267
+	FuncT1IncBodyBegin         = 304
+	FuncT1IncBodyEnd           = 311
+	FuncT1DecDeclBegin         = 358
+	FuncT1DecBodyEnd           = 403
+	MethodCalcSumBodyBegin     = 555
+	FuncXSumBodyBegin          = 626
+	// sum_test.go
+	FuncTestSumBodyBegin              = 67
+	TypeExampleTestSuiteDeclBegin     = 226
+	FuncTestExampleBodyBegin          = 304
+	FuncTestExampleTestSuiteBodyBegin = 362
+)
+
 func TestFindInfluencedTests_Function(t *testing.T) {
 	cwd, _ := os.Getwd()
 	dirPath := filepath.Join(cwd, "testdata", "dependency")
-	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum.go", 35, 35}})
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum.go", FuncSumDeclBegin, FuncSumDeclBegin}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +61,7 @@ func TestFindInfluencedTests_Function(t *testing.T) {
 func TestFindInfluencedTests_TestFunction(t *testing.T) {
 	cwd, _ := os.Getwd()
 	dirPath := filepath.Join(cwd, "testdata", "dependency")
-	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", 67, 67}})
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", FuncTestSumBodyBegin, FuncTestSumBodyBegin}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,10 +76,10 @@ func TestFindInfluencedTests_TestFunction(t *testing.T) {
 	}
 }
 
-func TestFindInfluencedTests_TestSuite(t *testing.T) {
+func TestFindInfluencedTests_TestSuiteFunction(t *testing.T) {
 	cwd, _ := os.Getwd()
 	dirPath := filepath.Join(cwd, "testdata", "dependency")
-	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", 304, 304}})
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", FuncTestExampleBodyBegin, FuncTestExampleBodyBegin}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,6 +90,60 @@ func TestFindInfluencedTests_TestSuite(t *testing.T) {
 		t.Fatalf("wrong # of funcs: %d", len(influences[0].to))
 	}
 	if _, ok := influences[0].to["TestExampleTestSuite"]; !ok {
+		t.Errorf("no expected func: %#v", influences[0].to)
+	}
+}
+
+func TestFindInfluencedTests_TestSuiteType(t *testing.T) {
+	cwd, _ := os.Getwd()
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", TypeExampleTestSuiteDeclBegin, TypeExampleTestSuiteDeclBegin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(influences) != 1 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
+	}
+	if len(influences[0].to) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(influences[0].to))
+	}
+	if _, ok := influences[0].to["TestExampleTestSuite"]; !ok {
+		t.Errorf("no expected func: %#v", influences[0].to)
+	}
+}
+
+func TestFindInfluencedTests_Interface(t *testing.T) {
+	cwd, _ := os.Getwd()
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum.go", MethodCalcSumBodyBegin, MethodCalcSumBodyBegin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(influences) != 1 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
+	}
+	if len(influences[0].to) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(influences[0].to))
+	}
+	if _, ok := influences[0].to["TestCalculatorSum"]; !ok {
+		t.Errorf("no expected func: %#v", influences[0].to)
+	}
+}
+
+func TestFindInfluencedTests_XTestPackage(t *testing.T) {
+	cwd, _ := os.Getwd()
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum.go", FuncXSumBodyBegin, FuncXSumBodyBegin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(influences) != 1 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
+	}
+	if len(influences[0].to) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(influences[0].to))
+	}
+	if _, ok := influences[0].to["TestXSum"]; !ok {
 		t.Errorf("no expected func: %#v", influences[0].to)
 	}
 }
@@ -79,7 +160,7 @@ func TestFindInfluencedTests_IdentityNotFound(t *testing.T) {
 	}
 }
 
-func TestFindInfluencedTests_NoGoDirectory(t *testing.T) {
+func TestFindInfluencedTests_NoGoFile(t *testing.T) {
 	cwd, _ := os.Getwd()
 	dirPath := filepath.Join(cwd, "testdata", "no_go_files")
 	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"README.md", 0, 0}})
@@ -94,7 +175,7 @@ func TestFindInfluencedTests_NoGoDirectory(t *testing.T) {
 func TestFindInfluencedTests_MultipleChanges(t *testing.T) {
 	cwd, _ := os.Getwd()
 	dirPath := filepath.Join(cwd, "testdata", "dependency")
-	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum.go", 35, 35}, {"sum.go", 304, 304}})
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum.go", FuncSumDeclBegin, FuncSumDeclBegin}, {"sum.go", FuncT1IncBodyBegin, FuncT1IncBodyBegin}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +192,7 @@ func TestFindInfluencedTests_MultipleChanges(t *testing.T) {
 func TestFindInfluencedTests_ChangeWithRange(t *testing.T) {
 	cwd, _ := os.Getwd()
 	dirPath := filepath.Join(cwd, "testdata", "dependency")
-	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", 0, 362}})
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", 0, FuncTestExampleTestSuiteBodyBegin}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +239,7 @@ func TestFindEnclosingIdentity_PackageDecl(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := int64(0), int64(35)
+	begin, end := int64(0), int64(FuncSumDeclBegin)
 	for o := begin; o < end; o++ {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if err != nil {
@@ -175,7 +256,7 @@ func TestFindEnclosingIdentity_SimpleFunc(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := int64(35), int64(75)
+	begin, end := int64(FuncSumDeclBegin), int64(FuncSumBodyEnd)
 	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
@@ -209,7 +290,7 @@ func TestFindEnclosingIdentity_NestedFunc(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	id, err := pkg.findEnclosingIdentity("sum.go", 151)
+	id, err := pkg.findEnclosingIdentity("sum.go", FuncNestedSumNestedFuncEnd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +304,7 @@ func TestFindEnclosingIdentity_TopLevelVar(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := int64(177), int64(191)
+	begin, end := int64(VarV1DeclBegin), int64(VarV1DeclEnd)
 	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
@@ -246,7 +327,7 @@ func TestFindEnclosingIdentity_TopLevelVarList(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := int64(193), int64(224)
+	begin, end := int64(VarsDeclBegin), int64(VarsDeclEnd)
 	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
@@ -269,7 +350,7 @@ func TestFindEnclosingIdentity_TopLevelConst(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := int64(226), int64(238)
+	begin, end := int64(ConstC1DeclBegin), int64(ConstC1DeclEnd)
 	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
@@ -292,7 +373,7 @@ func TestFindEnclosingIdentity_Type(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := int64(240), int64(265)
+	begin, end := int64(TypeT1DeclBegin), int64(TypeT1DeclEnd)
 	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
@@ -315,7 +396,7 @@ func TestFindEnclosingIdentity_Method(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := int64(267), int64(311)
+	begin, end := int64(FuncT1IncDeclBegin), int64(FuncT1IncBodyEnd)
 	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
@@ -338,7 +419,7 @@ func TestFindEnclosingIdentity_PointerReceiverMethod(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	begin, end := int64(358), int64(403)
+	begin, end := int64(FuncT1DecDeclBegin), int64(FuncT1DecBodyEnd)
 	for _, o := range []int64{begin - 1, end} {
 		id, err := pkg.findEnclosingIdentity("sum.go", o)
 		if id != nil || err != nil {
@@ -361,7 +442,7 @@ func TestFindUsers_FuncUseFunc(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	id, _ := pkg.findEnclosingIdentity("sum.go", 35)
+	id, _ := pkg.findEnclosingIdentity("sum.go", FuncSumDeclBegin)
 	users, err := pkg.findUsers(id)
 	if err != nil {
 		t.Fatal(err)
@@ -381,7 +462,7 @@ func TestFindUsers_FuncUseVar(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	id, _ := pkg.findEnclosingIdentity("sum.go", 177)
+	id, _ := pkg.findEnclosingIdentity("sum.go", VarV1DeclBegin)
 	users, err := pkg.findUsers(id)
 	if err != nil {
 		t.Fatal(err)
@@ -401,7 +482,7 @@ func TestFindUsers_FuncUseConst(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	id, _ := pkg.findEnclosingIdentity("sum.go", 226)
+	id, _ := pkg.findEnclosingIdentity("sum.go", ConstC1DeclBegin)
 	users, err := pkg.findUsers(id)
 	if err != nil {
 		t.Fatal(err)
@@ -421,7 +502,7 @@ func TestFindUsers_FuncUseType(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	id, _ := pkg.findEnclosingIdentity("sum.go", 240)
+	id, _ := pkg.findEnclosingIdentity("sum.go", TypeT1DeclBegin)
 	users, err := pkg.findUsers(id)
 	if err != nil {
 		t.Fatal(err)
@@ -464,7 +545,7 @@ func TestFindUsers_FuncUseMethod(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	id, _ := pkg.findEnclosingIdentity("sum.go", 267)
+	id, _ := pkg.findEnclosingIdentity("sum.go", FuncT1IncDeclBegin)
 	users, err := pkg.findUsers(id)
 	if err != nil {
 		t.Fatal(err)
@@ -488,7 +569,7 @@ func TestFindUsers_FuncUsePointerReceiverMethod(t *testing.T) {
 	pkgPath := filepath.Join(cwd, "testdata", "dependency")
 	pkg, _ := newParsedPackage(&build.Default, pkgPath)
 
-	id, _ := pkg.findEnclosingIdentity("sum.go", 358)
+	id, _ := pkg.findEnclosingIdentity("sum.go", FuncT1DecDeclBegin)
 	users, err := pkg.findUsers(id)
 	if err != nil {
 		t.Fatal(err)

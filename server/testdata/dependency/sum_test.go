@@ -24,3 +24,10 @@ func (suite *ExampleTestSuite) TestExample() {
 }
 
 func TestExampleTestSuite(t *testing.T) {}
+
+func TestCalculatorSum(t *testing.T) {
+	c := newCalc()
+	if c.Sum(1, 1) != 2 {
+		t.Fatal("not 2")
+	}
+}

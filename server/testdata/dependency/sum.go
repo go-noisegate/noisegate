@@ -38,4 +38,23 @@ func (t *T1) Dec(a int) int {
 	return a - 1
 }
 
+type Calculator interface {
+	Sum(a, b int) int
+}
+
+type calc struct{}
+
+func newCalc() Calculator {
+	return calc{}
+}
+
+func (c calc) Sum(a, b int) int {
+	return a + b
+}
+
+// called from test package
+func XSum(a, b int) int {
+	return a + b
+}
+
 // append only
