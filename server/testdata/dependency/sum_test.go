@@ -1,6 +1,10 @@
 package dependency
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/suite"
+)
 
 func TestSum(t *testing.T) {
 	if Sum(1, 1) != 2 {
@@ -17,13 +21,17 @@ func TestSum(t *testing.T) {
 	// append only
 }
 
-type ExampleTestSuite struct{}
+type ExampleTestSuite struct {
+	suite.Suite
+}
 
 func (suite *ExampleTestSuite) TestExample() {
 	Sum(1, 1)
 }
 
-func TestExampleTestSuite(t *testing.T) {}
+func TestExampleTestSuite(t *testing.T) {
+	suite.Run(t, new(ExampleTestSuite))
+}
 
 func TestCalculatorSum(t *testing.T) {
 	c := newCalc()

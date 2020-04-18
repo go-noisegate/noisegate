@@ -31,10 +31,10 @@ const (
 	MethodCalcSumBodyBegin     = 555
 	FuncXSumBodyBegin          = 626
 	// sum_test.go
-	FuncTestSumBodyBegin              = 67
-	TypeExampleTestSuiteDeclBegin     = 226
-	FuncTestExampleBodyBegin          = 304
-	FuncTestExampleTestSuiteBodyBegin = 362
+	FuncTestSumBodyBegin              = 110
+	TypeExampleTestSuiteDeclBegin     = 269
+	FuncTestExampleBodyBegin          = 363
+	FuncTestExampleTestSuiteBodyBegin = 419
 )
 
 func TestFindInfluencedTests_Function(t *testing.T) {
@@ -452,7 +452,7 @@ func TestFindUsers_FuncUseFunc(t *testing.T) {
 		t.Fatalf("wrong # of users: %d", len(users))
 	}
 	pos := pkg.fset.Position(users[0].NamePos)
-	if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != "sum_test.go" || pos.Line != 6 {
+	if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != "sum_test.go" || pos.Line != 10 {
 		t.Errorf("wrong position: %#v", pos)
 	}
 }
@@ -472,7 +472,7 @@ func TestFindUsers_FuncUseVar(t *testing.T) {
 		t.Fatalf("wrong # of users: %d", len(users))
 	}
 	pos := pkg.fset.Position(users[0].NamePos)
-	if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != "sum_test.go" || pos.Line != 9 {
+	if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != "sum_test.go" || pos.Line != 13 {
 		t.Errorf("wrong position: %#v", pos)
 	}
 }
@@ -492,7 +492,7 @@ func TestFindUsers_FuncUseConst(t *testing.T) {
 		t.Fatalf("wrong # of users: %d", len(users))
 	}
 	pos := pkg.fset.Position(users[0].NamePos)
-	if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != "sum_test.go" || pos.Line != 9 {
+	if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != "sum_test.go" || pos.Line != 13 {
 		t.Errorf("wrong position: %#v", pos)
 	}
 }
@@ -519,8 +519,8 @@ func TestFindUsers_FuncUseType(t *testing.T) {
 	}{
 		{"sum.go", 29},
 		{"sum.go", 37},
-		{"sum_test.go", 10},
-		{"sum_test.go", 13},
+		{"sum_test.go", 14},
+		{"sum_test.go", 17},
 	} {
 		pos := pkg.fset.Position(users[i].NamePos)
 		if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != expect.filename || pos.Line != expect.line {
@@ -556,7 +556,7 @@ func TestFindUsers_FuncUseMethod(t *testing.T) {
 	}
 	for i, expect := range []struct {
 		line int
-	}{{11}, {14}} {
+	}{{15}, {18}} {
 		pos := pkg.fset.Position(users[i].NamePos)
 		if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != "sum_test.go" || pos.Line != expect.line {
 			t.Errorf("wrong position: %#v", pos)
@@ -580,7 +580,7 @@ func TestFindUsers_FuncUsePointerReceiverMethod(t *testing.T) {
 	}
 	for i, expect := range []struct {
 		line int
-	}{{12}, {15}} {
+	}{{16}, {19}} {
 		pos := pkg.fset.Position(users[i].NamePos)
 		if !filepath.IsAbs(pos.Filename) || filepath.Base(pos.Filename) != "sum_test.go" || pos.Line != expect.line {
 			t.Errorf("wrong position: %#v", pos)

@@ -1,4 +1,4 @@
-// +build !exp1
+// +build exp1
 
 package server
 
@@ -122,34 +122,33 @@ func (p parsedPackage) findInfluence(filename string, offset int64) (influence, 
 	}
 	p.found[id.Name()] = struct{}{}
 
+	var users []*ast.Ident
 	if id.IsTestFunc() {
-		to := make(map[string]struct{})
-		name := id.Name()
-		if index := strings.Index(name, "."); index != -1 {
-			// workaround to support test suite. TODO: find more precise approach.
-			for _, t := range []string{"Test_", "Test"} {
-				if p.pkg.Scope.Lookup(t+name[:index]) != nil {
-					to[t+name[:index]] = struct{}{}
-				}
-			}
-		} else {
-			to[name] = struct{}{}
+		users = append(users, id.ASTIdentity())
+	} else {
+		users, err = p.findUsers(id)
+		if err != nil {
+			return influence{}, err
 		}
-		return influence{from: id, to: to}, nil
 	}
 
-	users, err := p.findUsers(id)
-	if err != nil {
-		return influence{}, err
-	}
-
-	set := make(map[string]struct{})
+	testFunctions := make(map[string]struct{})
+	testSuites := make(map[string]*ast.Ident)
 	for _, u := range users {
-		if f := p.findTestFunction(u); f != "" {
-			set[f] = struct{}{}
+		if r, f := p.findTestFunction(u); r == nil && f != "" {
+			testFunctions[f] = struct{}{}
+		} else if r != nil && f != "" {
+			testSuites[r.Name] = r
 		}
 	}
-	return influence{from: id, to: set}, nil
+
+	for _, s := range testSuites {
+		if r := p.findTestSuiteRunner(s); r != "" {
+			testFunctions[r] = struct{}{}
+		}
+	}
+
+	return influence{from: id, to: testFunctions}, nil
 }
 
 // findEnclosingIdentity finds the top level declaration to which the node at the specified `offset` belongs.
@@ -177,15 +176,14 @@ func (p parsedPackage) findEnclosingIdentity(filename string, offset int64) (ide
 	for _, n := range nodes {
 		if decl, ok := n.(*ast.FuncDecl); ok {
 			if decl.Recv == nil {
-				return functionIdentity{filename, decl.Name, p.pkg.Scope.Objects[decl.Name.Name]}, nil // decl.Name.Obj is nil
+				return functionIdentity{strings.TrimSuffix(p.pkg.Name, "_test"), filename, decl.Name}, nil
 			}
 
 			receiverType := decl.Recv.List[0].Type
 			return methodIdentity{
-				filename:         filename,
-				functionName:     decl.Name.Name,
-				receiverTypename: p.findTypenameFromType(receiverType),
-				findTypename:     p.findTypenameFromVar,
+				filename:             filename,
+				funcIdentity:         decl.Name,
+				receiverTypeIdentity: p.findIdentityFromType(receiverType),
 			}, nil
 		}
 
@@ -205,35 +203,16 @@ func (p parsedPackage) findEnclosingIdentity(filename string, offset int64) (ide
 
 // Ignores the star part which is not important for this package.
 // For example, it returns `T` when the type is `*T`.
-func (p parsedPackage) findTypenameFromType(e ast.Expr) string {
+func (p parsedPackage) findIdentityFromType(e ast.Expr) *ast.Ident {
 	switch v := e.(type) {
 	case *ast.Ident:
-		return v.Name
+		return v
 	case *ast.StarExpr:
-		id := v.X.(*ast.Ident)
-		return id.Name
+		return v.X.(*ast.Ident)
 	default:
 		log.Debugf("unexpected type: %#v", e)
-		return ""
+		return nil
 	}
-}
-
-// Ignores the pointer part which is not important for this package.
-// For example, it returns `T` when the variable is `var t *T`.
-func (p parsedPackage) findTypenameFromVar(e ast.Expr) string {
-	if typ := p.info.TypeOf(e); typ != nil {
-		for {
-			ptr, ok := typ.(*types.Pointer)
-			if !ok {
-				break
-			}
-			typ = ptr.Elem()
-		}
-		if named, ok := typ.(*types.Named); ok {
-			return named.Obj().Name()
-		}
-	}
-	return ""
 }
 
 func (p parsedPackage) findUsers(id identity) ([]*ast.Ident, error) {
@@ -249,10 +228,11 @@ func (p parsedPackage) findUsers(id identity) ([]*ast.Ident, error) {
 	return users, nil
 }
 
-func (p parsedPackage) findTestFunction(id *ast.Ident) string {
+// findTestFunction returns the test function name which uses the specified identity.
+func (p parsedPackage) findTestFunction(id *ast.Ident) (receiver *ast.Ident, funcName string) {
 	position := p.fset.Position(id.Pos())
 	if !strings.HasSuffix(position.Filename, "_test.go") {
-		return ""
+		return nil, ""
 	}
 
 	nodes, _ := astutil.PathEnclosingInterval(p.pkg.Files[position.Filename], id.Pos(), id.Pos())
@@ -262,17 +242,29 @@ func (p parsedPackage) findTestFunction(id *ast.Ident) string {
 				continue
 			}
 			if decl.Recv == nil {
-				return decl.Name.Name
+				return nil, decl.Name.Name
 			}
 
-			// workaround to support test suite. TODO: Find more precise approach.
 			receiverType := decl.Recv.List[0].Type
-			suiteName := p.findTypenameFromType(receiverType)
-			for _, t := range []string{"Test_", "Test"} {
-				if p.pkg.Scope.Lookup(t+suiteName) != nil {
-					return t + suiteName
-				}
+			receiverIdentity := p.findIdentityFromType(receiverType)
+			if receiverIdentity == nil {
+				continue
 			}
+			return receiverIdentity, decl.Name.Name
+		}
+	}
+	return nil, ""
+}
+
+func (p parsedPackage) findTestSuiteRunner(id *ast.Ident) string {
+	users, err := p.findUsers(defaultIdentity{id})
+	if err != nil {
+		return ""
+	}
+
+	for _, u := range users {
+		if r, f := p.findTestFunction(u); r == nil && f != "" {
+			return f
 		}
 	}
 	return ""
@@ -282,6 +274,7 @@ type identity interface {
 	Match(ast.Node) (*ast.Ident, bool)
 	Name() string
 	IsTestFunc() bool
+	ASTIdentity() *ast.Ident
 }
 
 type defaultIdentity struct {
@@ -290,7 +283,7 @@ type defaultIdentity struct {
 
 func (id defaultIdentity) Match(n ast.Node) (*ast.Ident, bool) {
 	if other, ok := n.(*ast.Ident); ok {
-		if other.Obj == id.Obj && other.Pos() != id.Obj.Pos() {
+		if other.Name == id.Ident.Name && other.Pos() != id.Pos() {
 			return other, true
 		}
 	}
@@ -305,27 +298,30 @@ func (id defaultIdentity) IsTestFunc() bool {
 	return false
 }
 
+func (id defaultIdentity) ASTIdentity() *ast.Ident {
+	return id.Ident
+}
+
 type functionIdentity struct {
-	filename string
+	pkgname, filename string
 	*ast.Ident
-	obj *ast.Object
 }
 
 func (id functionIdentity) Match(n ast.Node) (*ast.Ident, bool) {
-	if other, ok := n.(*ast.Ident); ok {
-		defer func() {
-			// sometimes panic. Need more context.
-			if r := recover(); r != nil {
-				log.Printf("panic: %v\n", r)
-				log.Printf("id: %#v, %#v\n", id, id.obj)
-				log.Printf("other: %#v, %#v\n", other, other.Obj)
-			}
-		}()
-
-		if other.Obj == id.obj && other.Pos() != id.obj.Pos() {
-			return other, true
+	// case 1: call from same pkg
+	if call, ok := n.(*ast.CallExpr); ok {
+		if nameIdentity, ok := call.Fun.(*ast.Ident); ok && nameIdentity.Name == id.Ident.Name {
+			return nameIdentity, true
 		}
 	}
+
+	// case 2: call from test pkg
+	if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == id.Ident.Name {
+		if exp, ok := sel.X.(*ast.Ident); ok && exp.Name == id.pkgname {
+			return sel.Sel, true
+		}
+	}
+
 	return nil, false
 }
 
@@ -334,29 +330,35 @@ func (id functionIdentity) Name() string {
 }
 
 func (id functionIdentity) IsTestFunc() bool {
-	return strings.HasSuffix(id.filename, "_test.go") && strings.HasPrefix(id.Name(), "Test")
+	return strings.HasSuffix(id.filename, "_test.go") && strings.HasPrefix(id.Ident.Name, "Test")
+}
+
+func (id functionIdentity) ASTIdentity() *ast.Ident {
+	return id.Ident
 }
 
 type methodIdentity struct {
-	filename         string
-	functionName     string
-	receiverTypename string
-	findTypename     func(ast.Expr) string
+	filename             string
+	funcIdentity         *ast.Ident
+	receiverTypeIdentity *ast.Ident
 }
 
 func (id methodIdentity) Match(n ast.Node) (*ast.Ident, bool) {
-	if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == id.functionName {
-		if typename := id.findTypename(sel.X); typename != "" && typename == id.receiverTypename {
-			return sel.Sel, true
-		}
+	if sel, ok := n.(*ast.SelectorExpr); ok && sel.Sel.Name == id.funcIdentity.Name {
+		// do not check the type of the receiver to support the method call via interface at a cost of false positive.
+		return sel.Sel, true
 	}
 	return nil, false
 }
 
 func (id methodIdentity) Name() string {
-	return fmt.Sprintf("%s.%s", id.receiverTypename, id.functionName)
+	return fmt.Sprintf("%s.%s", id.receiverTypeIdentity.Name, id.funcIdentity.Name)
+}
+
+func (id methodIdentity) ASTIdentity() *ast.Ident {
+	return id.funcIdentity
 }
 
 func (id methodIdentity) IsTestFunc() bool {
-	return strings.HasSuffix(id.filename, "_test.go") && strings.HasPrefix(id.functionName, "Test")
+	return strings.HasSuffix(id.filename, "_test.go") && strings.HasPrefix(id.funcIdentity.Name, "Test")
 }
