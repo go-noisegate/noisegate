@@ -4,24 +4,25 @@
 
 ### Find test functions affected by recent changes
 
-The current approach is:
-* The editor plugin updates the list of the changes while a user edits the files.
-* When the `gate hint` command is called with the list of the changes, the server updates its internal list of the changes. The server maintains the change list for each directory.
-* When the `gate test` command is called, the server parses go files in the package and finds the affected test functions. The list of changes associated with the directory are cleared.
+The current approach:
 
-The detail of the last part is ([code here](https://github.com/ks888/noisegate/blob/master/server/dependency.go)):
-1. Parse go files in the package. Dependent packages are not parsed.
-2. For each element of the change list:
+```
+1. Parses all the files in the directory.
+2. For each change, find the affected test functions:
+   2-1. Finds the function or general declaration which encloses the change.
+   2-2a. If the declaration is the test function, the function is affected.
+   2-2b. Otherwise, finds the entities which uses the declaration, by traversing the AST tree.
+         (To detect the 'use', it simply compares the entity name with the declared name.)
+         Then, check if the ascendant AST nodes of entities are the test function declaration. If so, the function is affected.
+```
 
-   2-1. Finds the top-level declaration which encloses the specified change. Typically it's function declaration.
-
-   2-2a. If the top-level declaration is the test function, it's affected.
-
-   2-2b. Otherwise, find the test functions which uses the declared element. These test functions are affected.
+[See the code](https://github.com/ks888/noisegate/blob/master/server/dependency.go) for more details.
 
 Some pros and cons:
-* Lightweight. Parsing files can be heavy, but the tool does that only when the `gate test` is called.
-* Less precise. The content of the file may have changed dramatically since the `gate hint` is called and so the tool may consider the wrong test function as 'affected'.
-* Easy to understand. As described above, the tool does the simple analysis and a user can easily understand why some tests are executed. For the same reason, the implementation can be less buggy.
+* Lightweight
+   * Parsing the entire workspace can be very slow but we parse only the files in one directory. Usually it takes 10-20ms.
+* Less false negative, more false positive
+   * At the step 2-2b, we simply compare the name, but the name is not always unique. For example, `Calculator.Sum()` and `(*SimpleCalculator).Sum()` have the same method name, but its implementation may be diffirent (and if so, it's false positive).
+   * The content of the file may have changed dramatically since the list of changes are sent to the server. The tool may consider the wrong test function as 'affected'.
 
-If you come up with another approach or some improvements, please create an issue!
+If you know different approaches or some improvements, please create an issue!
