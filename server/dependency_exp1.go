@@ -176,6 +176,7 @@ func (p parsedPackage) findEnclosingIdentity(filename string, offset int64) (ide
 	for _, n := range nodes {
 		if decl, ok := n.(*ast.FuncDecl); ok {
 			if decl.Recv == nil {
+				// sometimes the package name for test is used
 				return functionIdentity{strings.TrimSuffix(p.pkg.Name, "_test"), filename, decl.Name}, nil
 			}
 
@@ -238,11 +239,15 @@ func (p parsedPackage) findTestFunction(id *ast.Ident) (receiver *ast.Ident, fun
 	nodes, _ := astutil.PathEnclosingInterval(p.pkg.Files[position.Filename], id.Pos(), id.Pos())
 	for _, n := range nodes {
 		if decl, ok := n.(*ast.FuncDecl); ok {
-			if !strings.HasPrefix(decl.Name.Name, "Test") {
+			if decl.Recv == nil {
+				if strings.HasPrefix(decl.Name.Name, "Test") {
+					return nil, decl.Name.Name
+				}
 				continue
 			}
-			if decl.Recv == nil {
-				return nil, decl.Name.Name
+
+			if !isTestSuiteFunction(decl.Name.Name) {
+				continue
 			}
 
 			receiverType := decl.Recv.List[0].Type
@@ -360,5 +365,16 @@ func (id methodIdentity) ASTIdentity() *ast.Ident {
 }
 
 func (id methodIdentity) IsTestFunc() bool {
-	return strings.HasSuffix(id.filename, "_test.go") && strings.HasPrefix(id.funcIdentity.Name, "Test")
+	return strings.HasSuffix(id.filename, "_test.go") && isTestSuiteFunction(id.funcIdentity.Name)
+}
+
+// `method` must be the method name. Do not specify the function name.
+func isTestSuiteFunction(method string) bool {
+	if strings.HasPrefix(method, "Test") {
+		return true
+	}
+
+	// a part of test suite?
+	return method == "AfterTest" || method == "BeforeTest" || method == "SetupSuite" ||
+		method == "SetupTest" || method == "TearDownSuite" || method == "TearDownTest"
 }

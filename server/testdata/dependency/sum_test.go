@@ -29,6 +29,9 @@ func (suite *ExampleTestSuite) TestExample() {
 	Sum(1, 1)
 }
 
+func (suite *ExampleTestSuite) SetupTest() {
+}
+
 func TestExampleTestSuite(t *testing.T) {
 	suite.Run(t, new(ExampleTestSuite))
 }

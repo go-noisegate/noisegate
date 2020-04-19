@@ -34,7 +34,8 @@ const (
 	FuncTestSumBodyBegin              = 110
 	TypeExampleTestSuiteDeclBegin     = 269
 	FuncTestExampleBodyBegin          = 363
-	FuncTestExampleTestSuiteBodyBegin = 419
+	FuncSetupTestBodyBegin            = 422
+	FuncTestExampleTestSuiteBodyBegin = 467
 )
 
 func TestFindInfluencedTests_Function(t *testing.T) {
@@ -98,6 +99,24 @@ func TestFindInfluencedTests_TestSuiteType(t *testing.T) {
 	cwd, _ := os.Getwd()
 	dirPath := filepath.Join(cwd, "testdata", "dependency")
 	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", TypeExampleTestSuiteDeclBegin, TypeExampleTestSuiteDeclBegin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(influences) != 1 {
+		t.Fatalf("wrong # of influences: %d", len(influences))
+	}
+	if len(influences[0].to) != 1 {
+		t.Fatalf("wrong # of funcs: %d", len(influences[0].to))
+	}
+	if _, ok := influences[0].to["TestExampleTestSuite"]; !ok {
+		t.Errorf("no expected func: %#v", influences[0].to)
+	}
+}
+
+func TestFindInfluencedTests_TestSuiteSetup(t *testing.T) {
+	cwd, _ := os.Getwd()
+	dirPath := filepath.Join(cwd, "testdata", "dependency")
+	influences, err := findInfluencedTests(&build.Default, dirPath, []Change{{"sum_test.go", FuncSetupTestBodyBegin, FuncSetupTestBodyBegin}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,10 +215,10 @@ func TestFindInfluencedTests_ChangeWithRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(influences) != 4 {
+	if len(influences) != 5 {
 		t.Fatalf("wrong # of influences: %d", len(influences))
 	}
-	for i, from := range []string{"TestSum", "ExampleTestSuite", "ExampleTestSuite.TestExample", "TestExampleTestSuite"} {
+	for i, from := range []string{"TestSum", "ExampleTestSuite", "ExampleTestSuite.TestExample", "ExampleTestSuite.SetupTest", "TestExampleTestSuite"} {
 		if influences[i].from.Name() != from {
 			t.Errorf("wrong 'from': %s", influences[i].from.Name())
 		}
