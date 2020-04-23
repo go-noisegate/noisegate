@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ks888/noisegate/common"
+	"github.com/go-noisegate/noisegate/common"
 )
 
 func TestHandleHint_InputIsFileAndRange(t *testing.T) {

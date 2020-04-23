@@ -16,7 +16,7 @@ The current approach:
          Then, check if the ascendant AST nodes of entities are the test function declaration. If so, the function is affected.
 ```
 
-[See the code](https://github.com/ks888/noisegate/blob/master/server/dependency.go) for more details.
+[See the code](https://github.com/go-noisegate/noisegate/blob/master/server/dependency.go) for more details.
 
 Some pros and cons:
 * Lightweight

@@ -10,8 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ks888/noisegate/common"
-	"github.com/ks888/noisegate/common/log"
+	"github.com/go-noisegate/noisegate/common"
+	"github.com/go-noisegate/noisegate/common/log"
 )
 
 // Server serves the APIs for the cli client.

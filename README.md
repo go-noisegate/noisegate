@@ -11,8 +11,8 @@ It selects the tests affected by your recent edits and run them using `go test`.
 ## Quickstart
 
 You usually use this tool via the editor plugin. So the best quickstart document depends on your editor:
-* [emacs](https://github.com/ks888/noisegate.el)
-* [vscode](https://github.com/ks888/vscode-go-noisegate)
+* [emacs](https://github.com/go-noisegate/noisegate.el)
+* [vscode](https://github.com/go-noisegate/vscode-go-noisegate)
 
 (If your favorite editor is not here, please consider writing the plugin for your editor!)
 
@@ -29,7 +29,7 @@ Usually your editor plugin sends the recent edits and the test requests to the s
 1. Install the server (`gated`) and cli (`gate`):
 
    ```sh
-   $ go get -u github.com/ks888/noisegate/cmd/gate && go get -u github.com/ks888/noisegate/cmd/gated
+   $ go get -u github.com/go-noisegate/noisegate/cmd/gate && go get -u github.com/go-noisegate/noisegate/cmd/gated
    ```
 
 2. Run the server (`gated`) if it's not running yet.
@@ -38,22 +38,22 @@ Usually your editor plugin sends the recent edits and the test requests to the s
    $ gated
    ```
 
-3. Download the tutorial repository.
+3. Download the quickstart repository.
 
    ```sh
-   $ go get -u github.com/ks888/noisegate-tutorial
+   $ go get -u github.com/go-noisegate/quickstart
    ```
 
 ### Run your tests
 
-Let's assume you just implemented some [functions](https://github.com/ks888/noisegate-tutorial/blob/master/math.go) (`SlowAdd` and `SlowSub`) and [tests](https://github.com/ks888/noisegate-tutorial/blob/master/math_test.go) (`TestSlowAdd`, `TestSlowAdd_Overflow` and `TestSlowSub`) at the `noisegate-tutorial` repository.
+Let's assume you just implemented some [functions](https://github.com/go-noisegate/quickstart/blob/master/math.go) (`SlowAdd` and `SlowSub`) and [tests](https://github.com/go-noisegate/quickstart/blob/master/math_test.go) (`TestSlowAdd`, `TestSlowAdd_Overflow` and `TestSlowSub`) at the `quickstart` repository.
 
 1. Run all the tests
 
    First, check if all the tests are passed. Run the `gate test` command at the repository root.
 
    ```sh
-   $ cd $GOPATH/src/github.com/ks888/noisegate-tutorial
+   $ cd $GOPATH/src/github.com/go-noisegate/quickstart
    $ gate test -bypass . -- -v
    Run all tests:
    === RUN   TestSlowAdd
@@ -64,7 +64,7 @@ Let's assume you just implemented some [functions](https://github.com/ks888/nois
    --- FAIL: TestSlowSub (1.00s)
        math_test.go:22: wrong result: 2
    FAIL
-   FAIL    github.com/ks888/noisegate-tutorial     3.019s
+   FAIL    github.com/go-noisegate/quickstart     3.019s
    FAIL
    ```
 
@@ -75,7 +75,7 @@ Let's assume you just implemented some [functions](https://github.com/ks888/nois
 
 2. Change the code
 
-   To fix the failed test, open the `math.go` and change [the `SlowSub` function](https://github.com/ks888/noisegate-tutorial/blob/master/math.go#L12). `return a + b` at the line 12 should be `return a - b`.
+   To fix the failed test, open the `math.go` and change [the `SlowSub` function](https://github.com/go-noisegate/quickstart/blob/master/math.go#L12). `return a + b` at the line 12 should be `return a - b`.
 
 3. Hint the change
 
@@ -97,7 +97,7 @@ Let's assume you just implemented some [functions](https://github.com/ks888/nois
    === RUN   TestSlowSub
    --- PASS: TestSlowSub (1.00s)
    PASS
-   ok      github.com/ks888/noisegate-tutorial     1.006s
+   ok      github.com/go-noisegate/quickstart     1.006s
    ```
 
    * Without the `-bypass` option, the tool runs the tests affected by the recent changes.
@@ -125,4 +125,4 @@ $ gate test -bypass . -- -v
 
 ## How it works
 
-See [DEVELOPMENT.md](https://github.com/ks888/noisegate/blob/master/DEVELOPMENT.md).
+See [DEVELOPMENT.md](https://github.com/go-noisegate/noisegate/blob/master/DEVELOPMENT.md).

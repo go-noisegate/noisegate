@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ks888/noisegate/common/log"
+	"github.com/go-noisegate/noisegate/common/log"
 )
 
 func TestMain(m *testing.M) {

@@ -1,4 +1,4 @@
-module github.com/ks888/noisegate
+module github.com/go-noisegate/noisegate
 
 go 1.13
 

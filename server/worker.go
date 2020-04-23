@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/ks888/noisegate/common/log"
+	"github.com/go-noisegate/noisegate/common/log"
 )
 
 type worker struct {

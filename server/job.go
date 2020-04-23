@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ks888/noisegate/common/log"
+	"github.com/go-noisegate/noisegate/common/log"
 )
 
 // Job represents the job to test one package.

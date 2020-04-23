@@ -3,7 +3,7 @@ package dependency_test
 import (
 	"testing"
 
-	"github.com/ks888/noisegate/server/testdata/dependency"
+	"github.com/go-noisegate/noisegate/server/testdata/dependency"
 )
 
 func TestXSum(t *testing.T) {

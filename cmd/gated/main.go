@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ks888/noisegate/common"
-	"github.com/ks888/noisegate/common/log"
-	"github.com/ks888/noisegate/server"
+	"github.com/go-noisegate/noisegate/common"
+	"github.com/go-noisegate/noisegate/common/log"
+	"github.com/go-noisegate/noisegate/server"
 	"github.com/urfave/cli/v2"
 )
 

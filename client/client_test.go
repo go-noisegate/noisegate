@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ks888/noisegate/client"
-	"github.com/ks888/noisegate/common"
+	"github.com/go-noisegate/noisegate/client"
+	"github.com/go-noisegate/noisegate/common"
 )
 
 func TestTestAction(t *testing.T) {
