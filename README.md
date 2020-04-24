@@ -1,5 +1,8 @@
 # Noise Gate
 
+[![Build Status](https://travis-ci.org/go-noisegate/noisegate.svg?branch=master)](https://travis-ci.org/go-noisegate/noisegate)
+[![Go Report Card](https://goreportcard.com/badge/github.com/go-noisegate/noisegate)](https://goreportcard.com/report/github.com/go-noisegate/noisegate)
+
 Noise Gate is the Golang test runner to get faster test results.
 
 It selects the tests affected by your recent edits and run them using `go test`.
