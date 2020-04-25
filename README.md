@@ -95,7 +95,7 @@ Let's assume you just implemented some [functions](https://github.com/go-noisega
    Let's check if the test is fixed. Run the `gate test` again.
 
    ```sh
-   $ gate test .
+   $ gate test . -- -v
    Changed: [SlowSub]
    === RUN   TestSlowSub
    --- PASS: TestSlowSub (1.00s)
