@@ -3,9 +3,13 @@
 [![Build Status](https://travis-ci.org/go-noisegate/noisegate.svg?branch=master)](https://travis-ci.org/go-noisegate/noisegate)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-noisegate/noisegate)](https://goreportcard.com/report/github.com/go-noisegate/noisegate)
 
-Noise Gate is the Golang test runner to get faster test results.
+**Noise Gate** is the Golang test runner to get faster test results.
 
-It selects the tests affected by your recent edits and run them using `go test`.
+Golang is fast and its test is fast as well. However, as you write more tests, the time to run tests gets longer and it's useful if you can select a portion of test functions and run them only.
+
+The popular approaches are something like `Run all tests in the current file` and `Run a test function at cursor`. Though these approaches are straightforward, they often *run unnecessary tests and skip necessary tests*.
+
+**Noise Gate**'s approach is `Run tests affected by recent edits`. It focuses on the changes since the last test and finds (1)the changed test functions and (2)the test functions which use the changed parts. Then, it runs these functions using `go test`. With this approach, it aims to *run only the necessary tests and never skip necessary tests.*
 
 ## Prerequisites
 
